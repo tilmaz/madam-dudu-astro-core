@@ -1,0 +1,6 @@
+[
+  { "city": "ankara",  "country": "türkiye", "lat": 39.93,   "lon": 32.85,   "tzid": "Europe/Istanbul" },
+  { "city": "istanbul","country": "türkiye", "lat": 41.01,   "lon": 28.97,   "tzid": "Europe/Istanbul" },
+  { "city": "izmir",   "country": "türkiye", "lat": 38.4237, "lon": 27.1428, "tzid": "Europe/Istanbul" },
+  { "city": "berlin",  "country": "almanya", "lat": 52.52,   "lon": 13.405,  "tzid": "Europe/Berlin" }
+]
