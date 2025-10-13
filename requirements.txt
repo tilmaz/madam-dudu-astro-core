@@ -1,2 +1,5 @@
 fastapi
 uvicorn[standard]
+pyswisseph
+python-dateutil
+pytz
