@@ -1,12 +1,12 @@
 from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 import pytz
 import swisseph as swe
 import os, requests
 
-app = FastAPI(title="Madam Dudu Astro Core", version="2.1.0")
+app = FastAPI(title="Madam Dudu Astro Core", version="2.2.0")
 
 # --- env vars ---
 GOOGLE_KEY  = os.getenv("GOOGLE_MAPS_API_KEY", "")
@@ -31,12 +31,24 @@ ZODIAC = [
 class Input(BaseModel):
     name: str | None = None
     dob: str = Field(..., description="YYYY-MM-DD")
-    # tob: Placidus için zorunlu, WholeSign için opsiyonel
-    tob: str | None = Field(None, description="HH:MM (local). Required for Placidus, optional for WholeSign")
+    # Birth time:
+    # - Placidus için ZORUNLU
+    # - WholeSign için OPSİYONEL
+    # - mode=auto için MERKEZ SAAT olarak kullanılır
+    tob: str | None = Field(
+        None,
+        description="HH:MM (local). Required for Placidus, optional for WholeSign. For mode=auto, used as center time."
+    )
     city: str
     country: str
     zodiac: str = Field("Tropical", pattern="^(Tropical|Sidereal\\(Lahiri\\))$")
     house_system: str = Field("Placidus", pattern="^(Placidus|WholeSign)$")
+    # Auto modu için yeni alanlar:
+    mode: str = Field("manual", pattern="^(manual|auto)$")
+    time_uncertainty_minutes: int | None = Field(
+        60, ge=1, le=180,
+        description="Only for mode=auto; default 60"
+    )
 
 # ------------------------------ Helpers ------------------------------
 
@@ -54,9 +66,20 @@ def build_whole_sign_cusps(anchor_sign_idx: int):
     base = (anchor_sign_idx * 30.0) % 360.0
     return [round((base + k*30.0) % 360.0, 2) for k in range(12)]
 
+def jd_from_dt(dt_utc: datetime) -> float:
+    return swe.julday(
+        dt_utc.year, dt_utc.month, dt_utc.day,
+        dt_utc.hour + dt_utc.minute/60.0 + dt_utc.second/3600.0
+    )
+
+def asc_sign_for_jd(jd_ut: float, lat: float, lon: float) -> int:
+    houses_tmp, ascmc_tmp = swe.houses(jd_ut, lat, lon, b'P')
+    asc_lon_tmp = ascmc_tmp[0]
+    return sign_index_from_lon(asc_lon_tmp)
+
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "Madam Dudu Astro Core", "version": "2.1.0"}
+    return {"ok": True, "service": "Madam Dudu Astro Core", "version": app.version if hasattr(app, "version") else "2.2.0"}
 
 def geocode_to_latlon(city: str, country: str):
     q = f"{city}, {country}"
@@ -120,8 +143,6 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
         try:
             local_dt = tz.localize(parser.parse(f"{i.dob} {tob_use}"), is_dst=None)
         except pytz.AmbiguousTimeError:
-            # Varsayım: belirsizlik durumunda birkaç dakikalık kaydırma denenebilir;
-            # sade yaklaşımla kullanıcıdan netleştirme istemek daha güvenli:
             raise HTTPException(400, detail="Yerel saat DST nedeniyle belirsiz (ambiguous). Placidus için net saat verin veya WholeSign (no exact time) kullanın.")
         except pytz.NonExistentTimeError:
             raise HTTPException(400, detail="Yerel saat DST nedeniyle geçersiz (non-existent). Placidus için geçerli bir saat verin veya WholeSign kullanın.")
@@ -132,10 +153,7 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
     utc_dt = local_dt.astimezone(pytz.UTC)
 
     # 4) Julian Day (UT)
-    jd_ut = swe.julday(
-        utc_dt.year, utc_dt.month, utc_dt.day,
-        utc_dt.hour + utc_dt.minute/60.0 + utc_dt.second/3600.0
-    )
+    jd_ut = jd_from_dt(utc_dt)
 
     # 5) Zodyak bayrakları
     flag = swe.FLG_SWIEPH
@@ -149,8 +167,42 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
     sun_sign,  sun_deg,  sun_lon  = sign_deg(sun[0])
     moon_sign, moon_deg, moon_lon = sign_deg(moon[0])
 
+    # --- AUTO MODE (± window) ---
+    mode_final = None
+    auto_reason = None
+    asc_probe = None
+    if i.mode == "auto":
+        if not i.tob:
+            raise HTTPException(400, detail="mode=auto için merkez saat (tob) gerekir; örn. ~16:30 ise 16:30 yazın.")
+        delta_min = int(i.time_uncertainty_minutes or 60)
+        dt_minus = (utc_dt - timedelta(minutes=delta_min))
+        dt_plus  = (utc_dt + timedelta(minutes=delta_min))
+        jd_minus = jd_from_dt(dt_minus)
+        jd_plus  = jd_from_dt(dt_plus)
+
+        s_minus = asc_sign_for_jd(jd_minus, lat, lon)
+        s_plus  = asc_sign_for_jd(jd_plus,  lat, lon)
+
+        asc_probe = {
+            "minutes": delta_min,
+            "asc_sign_minus": ZODIAC[s_minus],
+            "asc_sign_plus":  ZODIAC[s_plus]
+        }
+
+        if s_minus == s_plus:
+            mode_final = "Placidus"
+            auto_reason = "asc_sign_stable"
+        else:
+            mode_final = "WholeSign"
+            auto_reason = "asc_sign_changes_within_window"
+
+    # Seçilecek sistem: manual ise body'deki, auto ise karar
+    chosen_system = i.house_system
+    if i.mode == "auto" and mode_final:
+        chosen_system = mode_final
+
     # 7) Evler ve ASC/MC
-    if i.house_system == "Placidus":
+    if chosen_system == "Placidus":
         houses, ascmc = swe.houses(jd_ut, lat, lon, b'P')
         asc_lon = ascmc[0]
         mc_lon  = ascmc[1]
@@ -160,7 +212,7 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
         mc_payload  = {"ecliptic_long": round(mc_lon % 360, 2)}
         houses_payload = {"system": "Placidus", "cusps_longitudes": cusps_out}
     else:
-        # WholeSign: 1.ev = ASC'nin burcu (saat varsa), yoksa Güneş burcu (Solar Whole Sign)
+        # WholeSign
         if i.tob:
             houses_tmp, ascmc_tmp = swe.houses(jd_ut, lat, lon, b'P')
             asc_lon_tmp = ascmc_tmp[0]
@@ -186,10 +238,10 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
     # 8) Özet
     dst_on = bool(local_dt.dst())
     offset_seconds = int(local_dt.utcoffset().total_seconds())
-    sign = "+" if offset_seconds >= 0 else "-"
+    sign_pm = "+" if offset_seconds >= 0 else "-"
     hh = abs(offset_seconds)//3600
     mm = (abs(offset_seconds)%3600)//60
-    offset_str = f"{sign}{hh:02d}:{mm:02d}"
+    offset_str = f"{sign_pm}{hh:02d}:{mm:02d}"
 
     return {
         "input": {
@@ -201,7 +253,7 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
             "datetime_local": local_dt.strftime("%Y-%m-%d %H:%M:%S %Z"),
             "datetime_utc":   utc_dt.strftime("%Y-%m-%d %H:%M:%S UTC"),
             "lat": lat, "lon": lon, "tzid": tzid,
-            "zodiac": i.zodiac, "house_system": i.house_system,
+            "zodiac": i.zodiac, "house_system": chosen_system,
             "approx_time": approx_time
         },
         "sun":  {"sign": sun_sign,  "degree": sun_deg,  "ecliptic_long": sun_lon},
@@ -211,5 +263,9 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
         "houses": houses_payload,
         "dst": dst_on,
         "utc_offset": offset_str,
-        "engine_version": "2.1.0"
+        "mode": i.mode,
+        "mode_final": (mode_final or "manual"),
+        "auto_reason": auto_reason,
+        "asc_probe": asc_probe,
+        "engine_version": "2.2.0"
     }
