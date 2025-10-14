@@ -29,8 +29,8 @@ class Input(BaseModel):
     tob: str = Field(..., description="HH:MM (yerel)")
     city: str
     country: str
-    zodiac: str = Field("Tropical", regex="^(Tropical|Sidereal\\(Lahiri\\))$")
-    house_system: str = Field("Placidus", regex="^(Placidus)$")  # her zaman Placidus
+    zodiac: str = Field("Tropical", pattern="^(Tropical|Sidereal\\(Lahiri\\))$")
+    house_system: str = Field("Placidus", pattern="^(Placidus)$")  # her zaman Placidus
 
 def sign_deg(ecl_lon: float):
     lon = ecl_lon % 360.0
