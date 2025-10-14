@@ -42,8 +42,8 @@ class Input(BaseModel):
     house_system: str = Field("Placidus", pattern="^(Placidus|WholeSign)$")
     mode: str = Field("manual", pattern="^(manual|auto)$")
     time_uncertainty_minutes: int | None = Field(
-        60, ge=1, le=180,
-        description="Only for mode=auto; default 60"
+        15, ge=1, le=180,
+        description="Only for mode=auto; default 15"
     )
 
 # ------------------------------ Helpers ------------------------------
