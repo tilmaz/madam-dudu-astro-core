@@ -10,7 +10,6 @@ from fastapi.responses import StreamingResponse
 
 app = FastAPI(title="Madam Dudu Astro Core", version="2.4.0")
 
-# --- env vars ---
 GOOGLE_KEY  = os.getenv("GOOGLE_MAPS_API_KEY", "")
 EPHE_PATH   = os.getenv("EPHE_PATH", "./ephe")
 SERVICE_KEY = os.getenv("API_KEY", "")
@@ -18,7 +17,7 @@ SERVICE_KEY = os.getenv("API_KEY", "")
 if not GOOGLE_KEY:
     print("WARN: GOOGLE_MAPS_API_KEY not set; /compute will fail for city lookups.")
 if not SERVICE_KEY:
-    print("WARN: API_KEY not set; /compute requires Authorization header.")
+    print("WARN: API_KEY not set; /chart requires Authorization header.")
 
 swe.set_ephe_path(EPHE_PATH)
 
@@ -56,14 +55,6 @@ def jd_from_dt(dt_utc: datetime) -> float:
 
 def sign_index_from_lon(lon: float) -> int:
     return int((lon % 360.0) // 30)
-
-def build_whole_sign_cusps(anchor_sign_idx: int):
-    base = (anchor_sign_idx * 30.0) % 360.0
-    return [round((base + k*30.0) % 360.0, 2) for k in range(12)]
-
-def asc_sign_for_jd(jd_ut: float, lat: float, lon: float) -> int:
-    houses_tmp, ascmc_tmp = swe.houses(jd_ut, lat, lon, b'P')
-    return sign_index_from_lon(ascmc_tmp[0])
 
 def planet_payload(xx0: float, speed_lon: float):
     s, d, lon = sign_deg(xx0)
@@ -137,9 +128,10 @@ def chart(i: Input, Authorization: str | None = Header(default=None)):
         payload["name"] = name
         chart_planets.append(payload)
 
-    # ⬇️ GÖZLEMLEME: Gezegen verilerini loga bas
+    # GEÇİCİ TEST: render loglarında açıları görmek için
     print("Planets Data:", chart_planets)
 
+    # 🔮 Şimdi çizimi yap!
     image_stream = draw_chart(
         chart_planets,
         name=i.name,
