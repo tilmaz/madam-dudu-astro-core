@@ -129,6 +129,6 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
 
     # --- Görseli belleğe yaz ---
     output = BytesIO()
-    bg.save(output, format="PNG")
+    bg.save(output, format="PNG", optimize=True, quality=75)
     output.seek(0)
     return output
