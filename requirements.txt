@@ -1,6 +1,7 @@
-fastapi
-uvicorn[standard]
-pyswisseph
-python-dateutil
-pytz
-requests
+fastapi  
+uvicorn[standard]  
+pyswisseph  
+python-dateutil  
+pytz  
+requests  
+Pillow
