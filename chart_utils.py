@@ -46,7 +46,10 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
 
     # --- ÜST BAŞLIK (Chart Title) ---
     title_text = f"{name}'s Natal Chart Wheel" if name else "Natal Chart Wheel"
-    title_w, title_h = draw.textsize(title_text, font=label_font)
+    bbox = draw.textbbox((0, 0), title_text, font=label_font)
+    title_w = bbox[2] - bbox[0]
+    title_h = bbox[3] - bbox[1]
+
     draw.text(
         ((bg.width - title_w) // 2, 30),
         title_text,
@@ -71,8 +74,12 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     # Çizim konumları
     spacing = 20
     line_y = bg.height - 90
-    date_w, _ = draw.textsize(date_str, font=small_font)
-    loc_w, _ = draw.textsize(location_str, font=small_font)
+
+    date_bbox = draw.textbbox((0, 0), date_str, font=small_font)
+    date_w = date_bbox[2] - date_bbox[0]
+
+    loc_bbox = draw.textbbox((0, 0), location_str, font=small_font)
+    loc_w = loc_bbox[2] - loc_bbox[0]
 
     draw.text(
         ((bg.width - date_w) // 2, line_y),
