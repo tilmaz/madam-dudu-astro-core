@@ -290,3 +290,26 @@ def compute(i: Input, Authorization: str | None = Header(default=None)):
         "asc_probe": asc_probe,
         "engine_version": "2.3.0"
     }
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from chart_utils import draw_chart
+
+@app.get("/chart")
+def chart_test():
+    # Dummy gezegen verisi – ileride /compute çıktısından alınacak
+    planets = [
+        {"name": "Sun", "degree": 220.5},
+        {"name": "Moon", "degree": 45.2},
+        {"name": "Mercury", "degree": 198.1},
+        {"name": "Venus", "degree": 175.6},
+        {"name": "Mars", "degree": 300.3},
+        {"name": "Jupiter", "degree": 10.1},
+        {"name": "Saturn", "degree": 88.9},
+        {"name": "Uranus", "degree": 140.0},
+        {"name": "Neptune", "degree": 330.0},
+        {"name": "Pluto", "degree": 270.0}
+    ]
+
+    # Görseli çiz ve döndür
+    img = draw_chart(planets)
+    return StreamingResponse(img, media_type="image/png")
