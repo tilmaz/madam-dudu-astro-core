@@ -44,7 +44,7 @@ def draw_chart(planets):
         y = center_y - radius * math.sin(angle_rad)
 
         symbol = planet_symbols.get(p["name"], p["name"])
-        draw.text((x - 12, y - 12), symbol, fill="black", font=font)
+        draw.text((x - 12, y - 12), symbol, fill="#800080", font=font)
 
     # --- Görseli belleğe yaz ---
     output = BytesIO()
