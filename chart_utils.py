@@ -32,14 +32,14 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     # --- Merkez ve yarıçap ---
     center_x, center_y = bg.width // 2, bg.height // 2
     radius = min(center_x, center_y) - 50
+    planet_radius = radius * 0.90  # gezegenleri biraz daha içeri yerleştir
 
     # --- Gezegenleri çiz ---
     for p in planets:
         angle_deg = p["ecliptic_long"]
         angle_rad = math.radians(90 - angle_deg)
-        planet_radius = radius * 0.90
-        x = center_x + radius * math.cos(angle_rad)
-        y = center_y - radius * math.sin(angle_rad)
+        x = center_x + planet_radius * math.cos(angle_rad)
+        y = center_y - planet_radius * math.sin(angle_rad)
         symbol = planet_symbols.get(p["name"], p["name"])
         draw.text((x - 20, y - 20), symbol, fill="#800080", font=planet_font)
 
@@ -48,9 +48,9 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     bbox = draw.textbbox((0, 0), title_text, font=label_font)
     title_w = bbox[2] - bbox[0]
     draw.text(
-        ((bg.width - title_w) // 2, 50),  # 30 → 50: biraz aşağı aldık
+        ((bg.width - title_w) // 2, 30),
         title_text,
-        fill="#800080",  # MOR
+        fill="#800080",
         font=label_font
     )
 
@@ -66,8 +66,8 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
 
     location_str = f"{city}/{country}" if city and country else ""
 
-    spacing = 50  # ARTTIRILDI
-    line_y = bg.height - 140  # biraz yukarı aldık
+    spacing = 50
+    line_y = bg.height - 120
 
     date_bbox = draw.textbbox((0, 0), date_str, font=small_font)
     date_w = date_bbox[2] - date_bbox[0]
@@ -78,13 +78,13 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     draw.text(
         ((bg.width - date_w) // 2, line_y),
         date_str,
-        fill="#800080",  # MOR
+        fill="#800080",
         font=small_font
     )
     draw.text(
         ((bg.width - loc_w) // 2, line_y + spacing),
         location_str,
-        fill="#800080",  # MOR
+        fill="#800080",
         font=small_font
     )
 
