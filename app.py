@@ -85,6 +85,35 @@ def latlon_to_tzid(lat: float, lon: float, utc_ts: int):
         raise HTTPException(400, detail="Time Zone bulunamadı.")
     return data["timeZoneId"]
 
+@app.post("/compute")
+def compute(i: Input):
+    lat, lon = geocode_to_latlon(i.city.strip(), i.country.strip())
+    tzid = latlon_to_tzid(lat, lon, int(datetime.utcnow().timestamp()))
+    tz = pytz.timezone(tzid)
+
+    tob_str = i.tob if i.tob else "12:00"
+    try:
+        local_dt = tz.localize(parser.parse(f"{i.dob} {tob_str}"), is_dst=None)
+    except:
+        raise HTTPException(400, detail="Tarih/saat geçersiz.")
+
+    utc_dt = local_dt.astimezone(pytz.UTC)
+
+    return {
+        "normalized": {
+            "datetime_local": local_dt.strftime("%Y-%m-%d %H:%M"),
+            "datetime_utc": utc_dt.strftime("%Y-%m-%d %H:%M"),
+            "tzid": tzid,
+            "dst": bool(local_dt.dst()),
+            "utc_offset": utc_dt.utcoffset().total_seconds() / 3600,
+            "lat": lat,
+            "lon": lon,
+            "zodiac": i.zodiac,
+            "house_system": i.house_system,
+            "approx_time": False if i.mode == "manual" else True
+        }
+    }
+
 @app.post("/chart")
 def chart(i: Input, Authorization: str | None = Header(default=None)):
     if not SERVICE_KEY:
@@ -100,13 +129,13 @@ def chart(i: Input, Authorization: str | None = Header(default=None)):
 
     if i.house_system == "Placidus" and not i.tob:
         raise HTTPException(400, detail="Placidus için saat zorunlu.")
-    
+
     tob_str = i.tob if i.tob else "12:00"
     try:
         local_dt = tz.localize(parser.parse(f"{i.dob} {tob_str}"), is_dst=None)
     except:
         raise HTTPException(400, detail="Tarih/saat geçersiz.")
-    
+
     utc_dt = local_dt.astimezone(pytz.UTC)
     jd_ut = jd_from_dt(utc_dt)
 
@@ -128,10 +157,8 @@ def chart(i: Input, Authorization: str | None = Header(default=None)):
         payload["name"] = name
         chart_planets.append(payload)
 
-    # GEÇİCİ TEST: render loglarında açıları görmek için
     print("Planets Data:", chart_planets)
 
-    # 🔮 Şimdi çizimi yap!
     image_stream = draw_chart(
         chart_planets,
         name=i.name,
@@ -140,5 +167,5 @@ def chart(i: Input, Authorization: str | None = Header(default=None)):
         city=i.city,
         country=i.country
     )
-    
+
     return StreamingResponse(image_stream, media_type="image/png")
