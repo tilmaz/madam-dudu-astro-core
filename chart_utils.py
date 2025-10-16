@@ -32,7 +32,7 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     # --- Merkez ve yarıçap ---
     center_x, center_y = bg.width // 2, bg.height // 2
     radius = min(center_x, center_y) - 50
-    planet_radius = radius * 0.90  # gezegenleri biraz daha içeri yerleştir
+    planet_radius = radius * 0.85  # 🔸 %15 içeri yerleştirdik
 
     # --- Gezegenleri çiz ---
     for p in planets:
