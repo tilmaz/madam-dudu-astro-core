@@ -37,6 +37,7 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     for p in planets:
         angle_deg = p["ecliptic_long"]
         angle_rad = math.radians(90 - angle_deg)
+        planet_radius = radius * 0.90
         x = center_x + radius * math.cos(angle_rad)
         y = center_y - radius * math.sin(angle_rad)
         symbol = planet_symbols.get(p["name"], p["name"])
