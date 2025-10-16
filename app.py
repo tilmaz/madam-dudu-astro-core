@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel, Field
-from datetime import datetime, timedelta
+from datetime import datetime
 from dateutil import parser
 import pytz
 import swisseph as swe
@@ -137,7 +137,9 @@ def chart(i: Input, Authorization: str | None = Header(default=None)):
         payload["name"] = name
         chart_planets.append(payload)
 
-    # 🔮 Şimdi çizimi yap!
+    # ⬇️ GÖZLEMLEME: Gezegen verilerini loga bas
+    print("Planets Data:", chart_planets)
+
     image_stream = draw_chart(
         chart_planets,
         name=i.name,
