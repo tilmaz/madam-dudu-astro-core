@@ -9,16 +9,16 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     template_url = "https://tilmaz.github.io/madam-dudu-astro-core/chart_template.png"
     response = requests.get(template_url)
     bg = Image.open(BytesIO(response.content)).convert("RGBA")
-
     draw = ImageDraw.Draw(bg)
 
     # --- Yazı tipleri ---
     try:
         font_path = "AstroGadget.ttf"
-        planet_font = ImageFont.truetype(font_path, 32)
-        label_font = ImageFont.truetype("arial.ttf", 32)
-        small_font = ImageFont.truetype("arial.ttf", 28)
-    except:
+        planet_font = ImageFont.truetype(font_path, 64)
+        label_font = ImageFont.truetype("DejaVuSans.ttf", 48)
+        small_font = ImageFont.truetype("DejaVuSans.ttf", 36)
+    except Exception as e:
+        print("FONT LOAD ERROR:", e)
         planet_font = ImageFont.load_default()
         label_font = ImageFont.load_default()
         small_font = ImageFont.load_default()
@@ -37,19 +37,15 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     for p in planets:
         angle_deg = p["degree"]
         angle_rad = math.radians(90 - angle_deg)
-
         x = center_x + radius * math.cos(angle_rad)
         y = center_y - radius * math.sin(angle_rad)
-
         symbol = planet_symbols.get(p["name"], p["name"])
-        draw.text((x - 15, y - 15), symbol, fill="#800080", font=planet_font)
+        draw.text((x - 20, y - 20), symbol, fill="#800080", font=planet_font)
 
     # --- ÜST BAŞLIK (Chart Title) ---
     title_text = f"{name}'s Natal Chart Wheel" if name else "Natal Chart Wheel"
     bbox = draw.textbbox((0, 0), title_text, font=label_font)
     title_w = bbox[2] - bbox[0]
-    title_h = bbox[3] - bbox[1]
-
     draw.text(
         ((bg.width - title_w) // 2, 30),
         title_text,
@@ -58,22 +54,19 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     )
 
     # --- ALT BİLGİLER (DOB / TOB / LOCATION) ---
-    # Tarihi formatla
     try:
         dob_obj = datetime.strptime(dob, "%Y-%m-%d")
         date_str = dob_obj.strftime("%d %B %Y")
     except:
         date_str = dob or ""
 
-    # Saat varsa ekle
     if tob:
         date_str += f" @{tob}"
 
     location_str = f"{city}/{country}" if city and country else ""
 
-    # Çizim konumları
     spacing = 20
-    line_y = bg.height - 90
+    line_y = bg.height - 110
 
     date_bbox = draw.textbbox((0, 0), date_str, font=small_font)
     date_w = date_bbox[2] - date_bbox[0]
