@@ -11,17 +11,25 @@ def draw_chart(planets):
 
     draw = ImageDraw.Draw(bg)
 
-    # --- Gezegen sembolleri haritası ---
-    planet_symbols = {
-        "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
-        "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇"
-    }
-
-    # --- Yazı tipi ve boyutu ---
+    # --- AstroGadget fontunu yükle ---
     try:
-        font = ImageFont.truetype("arial.ttf", 22)
+        font = ImageFont.truetype("AstroGadget.ttf", 32)  # Daha büyük yazı
     except:
         font = ImageFont.load_default()
+
+    # --- AstroGadget'e uygun gezegen sembolleri ---
+    planet_symbols = {
+        "Sun": "a",
+        "Moon": "b",
+        "Mercury": "c",
+        "Venus": "d",
+        "Mars": "e",
+        "Jupiter": "f",
+        "Saturn": "g",
+        "Uranus": "h",
+        "Neptune": "i",
+        "Pluto": "j"
+    }
 
     # --- Merkez ve yarıçap ---
     center_x, center_y = bg.width // 2, bg.height // 2
@@ -36,7 +44,7 @@ def draw_chart(planets):
         y = center_y - radius * math.sin(angle_rad)
 
         symbol = planet_symbols.get(p["name"], p["name"])
-        draw.text((x - 10, y - 10), symbol, fill="black", font=font)
+        draw.text((x - 12, y - 12), symbol, fill="black", font=font)
 
     # --- Görseli belleğe yaz ---
     output = BytesIO()
