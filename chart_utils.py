@@ -1,38 +1,44 @@
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import math
 
 def draw_chart(planets):
-    # --- 1. Arka plan şablonunu indir ---
+    # --- Şablon görselini indir ---
     template_url = "https://tilmaz.github.io/madam-dudu-astro-core/chart_template.png"
     response = requests.get(template_url)
     bg = Image.open(BytesIO(response.content)).convert("RGBA")
 
-    # --- 2. Çizim objesi oluştur ---
     draw = ImageDraw.Draw(bg)
 
-    # --- 3. Gezegenleri çember üzerine yerleştir ---
-    # Merkez koordinat ve yarıçap
-    center_x, center_y = bg.width // 2, bg.height // 2
-    radius = min(center_x, center_y) - 50  # kenarlardan biraz içeri
+    # --- Gezegen sembolleri haritası ---
+    planet_symbols = {
+        "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
+        "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇"
+    }
 
+    # --- Yazı tipi ve boyutu ---
+    try:
+        font = ImageFont.truetype("arial.ttf", 22)
+    except:
+        font = ImageFont.load_default()
+
+    # --- Merkez ve yarıçap ---
+    center_x, center_y = bg.width // 2, bg.height // 2
+    radius = min(center_x, center_y) - 50
+
+    # --- Gezegenleri çiz ---
     for p in planets:
         angle_deg = p["degree"]
-        angle_rad = math.radians(90 - angle_deg)  # 0° = yukarı
+        angle_rad = math.radians(90 - angle_deg)
 
-        # Konum
         x = center_x + radius * math.cos(angle_rad)
         y = center_y - radius * math.sin(angle_rad)
 
-        # Nokta çiz
-        draw.ellipse((x - 6, y - 6, x + 6, y + 6), fill="red")
+        symbol = planet_symbols.get(p["name"], p["name"])
+        draw.text((x - 10, y - 10), symbol, fill="black", font=font)
 
-        # Gezegen ismi (küçük harfle)
-        label = p["name"][:2].capitalize()
-        draw.text((x + 8, y - 8), label, fill="black")
-
-    # --- 4. Görseli bellekte sakla ve döndür ---
+    # --- Görseli belleğe yaz ---
     output = BytesIO()
     bg.save(output, format="PNG")
     output.seek(0)
