@@ -5,32 +5,48 @@ from chart_utils import draw_chart
 from io import BytesIO
 import os
 
-# 1) app.py'deki mevcut FastAPI uygulamasını içe al
-from app import app as compute_app  # /compute, /health vs. burada
+# --- Mevcut FastAPI uygulamasını (app.py) içe aktar ---
+from app import app as compute_app  # /compute, /health rotalarını getirir
 
-# 2) Yeni üst uygulama
-app = FastAPI(title="Madam Dudu Unified", version="1.0.1")
+# --- Yeni birleşik üst uygulama ---
+app = FastAPI(title="Madam Dudu Unified", version="1.0.2")
 
-# 3) mount yerine router'ı dahil et: tüm /compute, /health rotaları eklenir
+# --- Alt uygulamayı dahil et (/compute ve /health) ---
 app.include_router(compute_app.router)
 
-# 4) Aynı API_KEY ile korunan /render (PNG döndürür)
+# --- Ortak API anahtarı ---
 SERVICE_KEY = os.getenv("API_KEY", "")
+
 
 @app.post("/render")
 def render_chart(payload: dict = Body(...), Authorization: str | None = Header(default=None)):
+    """
+    /render uç noktası:
+    - Authorization: Bearer <API_KEY> zorunlu
+    - Gövde: {
+        "name": "...",
+        "dob": "YYYY-MM-DD",
+        "tob": "HH:MM",
+        "city": "...",
+        "country": "...",
+        "planets": [{"name":"Sun","ecliptic_long":311.53}, ...]
+      }
+    """
+    # --- Kimlik doğrulama ---
     if not SERVICE_KEY:
-        raise HTTPException(500, detail="API_KEY not set on server.")
+        raise HTTPException(status_code=500, detail="API_KEY not set on server.")
     if Authorization is None or not Authorization.startswith("Bearer "):
-        raise HTTPException(401, detail="Authorization: Bearer <API_KEY> header required.")
+        raise HTTPException(status_code=401, detail="Authorization: Bearer <API_KEY> header required.")
     if Authorization.split(" ", 1)[1] != SERVICE_KEY:
-        raise HTTPException(403, detail="Invalid API_KEY.")
+        raise HTTPException(status_code=403, detail="Invalid API_KEY.")
 
+    # --- Gezegen verisi kontrolü ---
     planets = payload.get("planets")
     if not isinstance(planets, list) or not planets:
-        raise HTTPException(400, detail="'planets' list is required.")
+        raise HTTPException(status_code=400, detail="'planets' list is required.")
 
-    img = draw_chart(
+    # --- Çizim ---
+    img_io = draw_chart(
         planets=planets,
         name=payload.get("name"),
         dob=payload.get("dob"),
@@ -38,7 +54,15 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
         city=payload.get("city"),
         country=payload.get("country"),
     )
-    if isinstance(img, bytes):
-        img = BytesIO(img)
 
-    return StreamingResponse(img, media_type="image/png", headers={"Cache-Control": "no-store"})
+    # draw_chart hem BytesIO hem bytes döndürebilir
+    if isinstance(img_io, bytes):
+        img_io = BytesIO(img_io)
+    img_io.seek(0)
+
+    # --- PNG çıktısını StreamingResponse olarak döndür ---
+    return StreamingResponse(
+        img_io,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"}
+    )
