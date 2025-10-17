@@ -9,6 +9,7 @@ import os
 import io
 import uuid
 import time
+import traceback
 
 # --- Ana Uygulama ---
 app = FastAPI(
@@ -27,7 +28,12 @@ if not SERVICE_KEY:
 
 # --- Geçici klasör oluştur (chart PNG saklama) ---
 TEMP_DIR = "/tmp/charts"
-os.makedirs(TEMP_DIR, exist_ok=True)
+try:
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    os.chmod(TEMP_DIR, 0o777)  # Herkese yazma izni
+    print(f"📁 TEMP_DIR initialized at {TEMP_DIR}")
+except Exception as e:
+    print(f"❌ Failed to create TEMP_DIR: {e}")
 
 # --- Statik dosyaları servis et (görseli URL olarak gösterebilmek için) ---
 app.mount("/charts", StaticFiles(directory=TEMP_DIR), name="charts")
@@ -39,54 +45,68 @@ def cleanup_old_files():
         fpath = os.path.join(TEMP_DIR, fname)
         if os.path.isfile(fpath):
             if now - os.path.getmtime(fpath) > 3600:  # 1 saat
-                os.remove(fpath)
+                try:
+                    os.remove(fpath)
+                except Exception as e:
+                    print(f"⚠️ Cleanup failed for {fname}: {e}")
 
 # --- Render Endpoint ---
 @app.post("/render")
 def render_chart(payload: dict = Body(...), Authorization: str | None = Header(default=None)):
-    if not SERVICE_KEY:
-        raise HTTPException(500, detail="API_KEY not set on server.")
-    if Authorization is None or not Authorization.startswith("Bearer "):
-        raise HTTPException(401, detail="Authorization: Bearer <API_KEY> header required.")
-    if Authorization.split(" ", 1)[1] != SERVICE_KEY:
-        raise HTTPException(403, detail="Invalid API_KEY.")
+    try:
+        if not SERVICE_KEY:
+            raise HTTPException(500, detail="API_KEY not set on server.")
+        if Authorization is None or not Authorization.startswith("Bearer "):
+            raise HTTPException(401, detail="Authorization: Bearer <API_KEY> header required.")
+        if Authorization.split(" ", 1)[1] != SERVICE_KEY:
+            raise HTTPException(403, detail="Invalid API_KEY.")
 
-    planets = payload.get("planets")
-    if not isinstance(planets, list) or not planets:
-        raise HTTPException(400, detail="'planets' list is required.")
+        planets = payload.get("planets")
+        if not isinstance(planets, list) or not planets:
+            raise HTTPException(400, detail="'planets' list is required.")
 
-    img_bytes = draw_chart(
-        planets=planets,
-        name=payload.get("name"),
-        dob=payload.get("dob"),
-        tob=payload.get("tob"),
-        city=payload.get("city"),
-        country=payload.get("country"),
-    )
+        img_bytes = draw_chart(
+            planets=planets,
+            name=payload.get("name"),
+            dob=payload.get("dob"),
+            tob=payload.get("tob"),
+            city=payload.get("city"),
+            country=payload.get("country"),
+        )
 
-    # Byte dönüştürme
-    if not isinstance(img_bytes, (bytes, bytearray)):
-        raise HTTPException(500, detail="draw_chart() did not return valid bytes.")
+        # Byte dönüştürme
+        if not isinstance(img_bytes, (bytes, bytearray)):
+            raise HTTPException(500, detail="draw_chart() did not return valid bytes.")
 
-    # Geçici PNG kaydet
-    cleanup_old_files()
-    file_id = uuid.uuid4().hex
-    file_path = os.path.join(TEMP_DIR, f"chart_{file_id}.png")
-    with open(file_path, "wb") as f:
-        f.write(img_bytes)
+        # Geçici PNG kaydet
+        cleanup_old_files()
+        file_id = uuid.uuid4().hex
+        file_path = os.path.join(TEMP_DIR, f"chart_{file_id}.png")
 
-    public_url = f"https://madam-dudu-astro-core-1.onrender.com/charts/chart_{file_id}.png"
+        try:
+            with open(file_path, "wb") as f:
+                f.write(img_bytes)
+        except Exception as e:
+            print(f"❌ Failed to write file: {e}")
+            raise HTTPException(500, detail=f"Could not write file to {TEMP_DIR}")
 
-    # İki opsiyonlu dönüş:
-    # 1️⃣ Görsel direkt (StreamingResponse)
-    # 2️⃣ JSON içinde URL (kolay erişim için)
-    if payload.get("as_url", True):
-        return JSONResponse({"url": public_url})
-    else:
-        return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png")
+        public_url = f"https://madam-dudu-astro-core-1.onrender.com/charts/chart_{file_id}.png"
+
+        # JSON veya görsel direkt dönüş
+        if payload.get("as_url", True):
+            return JSONResponse({"url": public_url})
+        else:
+            return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Genel hata yakalayıcı
+        error_detail = traceback.format_exc()
+        print(f"💥 Internal Server Error:\n{error_detail}")
+        raise HTTPException(500, detail=f"Unexpected server error: {str(e)}")
 
 # --- Sağlık kontrolü ---
 @app.get("/health")
 def unified_health():
     return {"ok": True, "service": "Madam Dudu Astro Core Unified", "version": "3.0.0"}
-
