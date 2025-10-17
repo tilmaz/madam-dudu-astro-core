@@ -5,16 +5,16 @@ from chart_utils import draw_chart
 from io import BytesIO
 import os
 
-# 1) app.py içindeki mevcut uygulamayı içe al (hiç değiştirmiyoruz)
-from app import app as compute_app  # /compute burada tanımlı
+# 1) app.py'deki mevcut FastAPI uygulamasını içe al
+from app import app as compute_app  # /compute, /health vs. burada
 
 # 2) Yeni üst uygulama
-app = FastAPI(title="Madam Dudu Unified", version="1.0.0")
+app = FastAPI(title="Madam Dudu Unified", version="1.0.1")
 
-# 3) Mevcut compute uygulamasını köke monte et (tüm /compute, /health vs. aynı kalır)
-app.mount("/", compute_app)
+# 3) mount yerine router'ı dahil et: tüm /compute, /health rotaları eklenir
+app.include_router(compute_app.router)
 
-# 4) Aynı API_KEY ile korunan /render ekle (PNG döndürür)
+# 4) Aynı API_KEY ile korunan /render (PNG döndürür)
 SERVICE_KEY = os.getenv("API_KEY", "")
 
 @app.post("/render")
