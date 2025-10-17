@@ -18,7 +18,7 @@ app = FastAPI(
 )
 
 # --- compute_app rotalarını ekle (/compute ve /health dahil) ---
-app.mount("/", compute_app)
+app.mount("/compute", compute_app)
 
 # --- API Key doğrulaması ---
 SERVICE_KEY = os.getenv("API_KEY", "")
