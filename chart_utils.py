@@ -1,118 +1,121 @@
-import requests
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
-import math
 from datetime import datetime
+import math
+
+PURPLE = "#800080"
+ASPECTS = {
+    0:   ("#FFD400", 8),
+    60:  ("#1DB954", 8),
+    90:  ("#E63946", 8),
+    120: ("#1E88E5", 8),
+    180: ("#7B1FA2", 8),
+}
+
+PLANET_SYMBOLS = {
+    "Sun":"a","Moon":"b","Mercury":"c","Venus":"d","Mars":"e",
+    "Jupiter":"f","Saturn":"g","Uranus":"h","Neptune":"i","Pluto":"j"
+}
+
+def _r(x, n=3): return round(float(x), n)
+
+def _angle_to_xy(deg, radius, cx, cy):
+    a = math.radians(90 - (deg % 360))
+    x = cx + radius * math.cos(a)
+    y = cy - radius * math.sin(a)
+    return (_r(x), _r(y))
+
+def _clamp(pt, cx, cy, radius):
+    vx, vy = pt[0]-cx, pt[1]-cy
+    d = math.hypot(vx, vy)
+    if d == 0: return (cx, cy)
+    k = radius/d
+    return (_r(cx + vx*k), _r(cy + vy*k))
 
 def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
-    # --- Şablon görselini indir ---
-    template_url = "https://tilmaz.github.io/madam-dudu-astro-core/chart_template.png"
-    response = requests.get(template_url)
-    bg = Image.open(BytesIO(response.content)).convert("RGBA")
+    """
+    planets: [{"name":"Sun","ecliptic_long":311.533}, ...]
+    returns: BytesIO (PNG)
+    """
+    # --- YEREL ŞABLON ve FONTLAR ---
+    template_path = "chart_template.png"   # repo kökünde
+    font_planet   = "AstroGadget.ttf"      # repo kökünde
+    font_text     = "DejaVuSans.ttf"       # yoksa default
+
+    bg = Image.open(template_path).convert("RGBA")
     draw = ImageDraw.Draw(bg)
 
-    # --- Yazı tipleri ---
     try:
-        planet_font = ImageFont.truetype("AstroGadget.ttf", 64)
-        label_font = ImageFont.truetype("DejaVuSans.ttf", 48)
-        small_font = ImageFont.truetype("DejaVuSans.ttf", 36)
-    except Exception as e:
-        print("FONT LOAD ERROR:", e)
+        planet_font = ImageFont.truetype(font_planet, 64)
+    except Exception:
         planet_font = ImageFont.load_default()
-        label_font = ImageFont.load_default()
-        small_font = ImageFont.load_default()
 
-    # --- Gezegen sembolleri haritası ---
-    planet_symbols = {
-        "Sun": "a", "Moon": "b", "Mercury": "c", "Venus": "d", "Mars": "e",
-        "Jupiter": "f", "Saturn": "g", "Uranus": "h", "Neptune": "i", "Pluto": "j"
-    }
+    try:
+        label_font = ImageFont.truetype(font_text, 48)
+        small_font = ImageFont.truetype(font_text, 36)
+    except Exception:
+        label_font = small_font = ImageFont.load_default()
 
-    # --- Merkez ve yarıçap ---
-    center_x, center_y = bg.width // 2, bg.height // 2
-    radius = int((min(center_x, center_y) - 50) * 0.85)  # %15 içeride
+    # --- GEOMETRİ ---
+    cx, cy = bg.width//2, bg.height//2
+    R_planet  = int((min(cx, cy) - 50) * 0.85)
+    R_aspect  = int(R_planet * 0.80)
 
-    # --- Gezegen pozisyonlarını hesapla ---
-    positions = {}
+    # --- GEZEGENLER ---
+    pos = {}
     for p in planets:
-        angle_deg = p["ecliptic_long"]
-        angle_rad = math.radians(90 - angle_deg)
-        x = center_x + radius * math.cos(angle_rad)
-        y = center_y - radius * math.sin(angle_rad)
-        positions[p["name"]] = (x, y)
-        symbol = planet_symbols.get(p["name"], "?")
-        draw.text((x - 20, y - 20), symbol, fill="#800080", font=planet_font)
+        deg = float(p["ecliptic_long"]) % 360
+        x, y = _angle_to_xy(deg, R_planet, cx, cy)
+        pos[p["name"]] = (x, y)
+        sym = PLANET_SYMBOLS.get(p["name"], "?")
+        bx, by, bx2, by2 = draw.textbbox((0,0), sym, font=planet_font)
+        draw.text((_r(x-(bx2-bx)/2), _r(y-(by2-by)/2)), sym, fill=PURPLE, font=planet_font)
 
-    # --- Aspect çizgileri (bold) ---
-    aspects = {
-        0:   (8, "yellow"),   # Conjunction
-        60:  (8, "green"),    # Sextile
-        90:  (8, "red"),      # Square
-        120: (8, "blue"),     # Trine
-        180: (8, "purple"),   # Opposition
-    }
+    # --- ASPECT ÇİZGİLERİ (±4° orb) ---
+    ORB = 4.0
+    n = len(planets)
+    for i in range(n):
+        for j in range(i+1, n):
+            p1, p2 = planets[i], planets[j]
+            d = abs(float(p1["ecliptic_long"]) - float(p2["ecliptic_long"])) % 360
+            if d > 180: d = 360 - d
+            for A, (col, th) in ASPECTS.items():
+                if abs(d - A) < ORB:
+                    a = _clamp(pos[p1["name"]], cx, cy, R_aspect)
+                    b = _clamp(pos[p2["name"]], cx, cy, R_aspect)
+                    draw.line([a, b], fill=col, width=th)
+                    break
 
-    try:
-        for i, p1 in enumerate(planets):
-            for j, p2 in enumerate(planets):
-                if i >= j:
-                    continue
-                diff = abs(p1["ecliptic_long"] - p2["ecliptic_long"])
-                diff = diff if diff <= 180 else 360 - diff
-                for aspect_angle, (thickness, color) in aspects.items():
-                    if abs(diff - aspect_angle) < 4:  # orb toleransı
-                        draw.line(
-                            [positions[p1["name"]], positions[p2["name"]]],
-                            fill=color,
-                            width=thickness
-                        )
-                        break
-    except Exception as e:
-        print("Aspect draw error:", e)
+    # --- BAŞLIK ---
+    title = f"{name}'s Natal Chart Wheel" if name else "Natal Chart Wheel"
+    tb = draw.textbbox((0,0), title, font=label_font)
+    draw.text(((bg.width-(tb[2]-tb[0]))//2, 30), title, fill=PURPLE, font=label_font)
 
-    # --- ÜST BAŞLIK ---
-    title_text = f"{name}'s Natal Chart Wheel" if name else "Natal Chart Wheel"
-    bbox = draw.textbbox((0, 0), title_text, font=label_font)
-    title_w = bbox[2] - bbox[0]
-    draw.text(((bg.width - title_w) // 2, 30), title_text, fill="#800080", font=label_font)
+    # --- ALT BİLGİ ---
+    if dob:
+        try: date_txt = datetime.strptime(dob, "%Y-%m-%d").strftime("%d %B %Y")
+        except: date_txt = dob
+    else:
+        date_txt = ""
+    if tob: date_txt = (date_txt + f" @{tob}").strip()
+    loc_txt = f"{city}/{country}" if (city and country) else (city or country or "")
 
-    # --- ALT BİLGİLER (Tarih / Saat / Lokasyon) ---
-    try:
-        dob_obj = datetime.strptime(dob, "%Y-%m-%d")
-        date_str = dob_obj.strftime("%d %B %Y")
-    except:
-        date_str = dob or ""
+    y0 = bg.height - 120
+    db = draw.textbbox((0,0), date_txt, font=small_font)
+    lb = draw.textbbox((0,0), loc_txt,  font=small_font)
+    draw.text(((bg.width-(db[2]-db[0]))//2, y0),       date_txt, fill=PURPLE, font=small_font)
+    draw.text(((bg.width-(lb[2]-lb[0]))//2, y0 + 50),  loc_txt,  fill=PURPLE, font=small_font)
 
-    if tob:
-        date_str += f" @{tob}"
+    # --- LEJAND ---
+    legend = [("Conjunction","#FFD400"),("Sextile","#1DB954"),("Square","#E63946"),
+              ("Trine","#1E88E5"),("Opposition","#7B1FA2")]
+    yL = bg.height - 240
+    for label, col in legend:
+        draw.rectangle([30, yL+12, 60, yL+24], fill=col)
+        draw.text((70, yL), label, fill=col, font=small_font)
+        yL += 38
 
-    location_str = f"{city}/{country}" if city and country else ""
-    spacing = 50
-    line_y = bg.height - 120
-
-    date_bbox = draw.textbbox((0, 0), date_str, font=small_font)
-    date_w = date_bbox[2] - date_bbox[0]
-    loc_bbox = draw.textbbox((0, 0), location_str, font=small_font)
-    loc_w = loc_bbox[2] - loc_bbox[0]
-
-    draw.text(((bg.width - date_w) // 2, line_y), date_str, fill="#800080", font=small_font)
-    draw.text(((bg.width - loc_w) // 2, line_y + spacing), location_str, fill="#800080", font=small_font)
-
-    # --- Aspect Legend (renkli yazılarla) ---
-    legend = [
-        ("🟡 Conjunction", "yellow"),
-        ("🟢 Sextile", "green"),
-        ("🔴 Square", "red"),
-        ("🔵 Trine", "blue"),
-        ("🟣 Opposition", "purple"),
-    ]
-    legend_y = bg.height - 240
-    for label, color in legend:
-        draw.text((40, legend_y), label, fill=color, font=small_font)
-        legend_y += 38
-
-    # --- Görseli optimize kaydet (ResponseTooLargeError fix) ---
-    output = BytesIO()
-    bg.save(output, format="PNG", optimize=True, quality=75)
-    output.seek(0)
-    return output
+    out = BytesIO()
+    bg.save(out, format="PNG", optimize=True)
+    out.seek(0)
+    return out
