@@ -1,32 +1,49 @@
 # app2.py
 from fastapi import FastAPI, Body, Header, HTTPException
-from fastapi.responses import StreamingResponse
-from io import BytesIO
-import os, requests
-
-# Çizim yardımcı fonksiyonu
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from chart_utils import draw_chart
+from app import app as compute_app  # /compute ve /health rotalarını buradan alır
+from io import BytesIO
+import os
+import io
+import uuid
+import time
 
-# app.py içindeki compute uygulamasını dahil et
-from app import compute as compute_fn  # /compute fonksiyonunu doğrudan çağıracağız
+# --- Ana Uygulama ---
+app = FastAPI(
+    title="Madam Dudu Astro Core Unified",
+    version="3.0.0",
+    description="Unified API: combines computation (/compute) and rendering (/render) for Madam Dudu Astrology engine."
+)
 
-app = FastAPI(title="Madam Dudu Unified", version="3.0.0")
+# --- compute_app rotalarını ekle (/compute ve /health dahil) ---
+app.mount("/", compute_app)
 
+# --- API Key doğrulaması ---
 SERVICE_KEY = os.getenv("API_KEY", "")
-BASE_URL = os.getenv("BASE_URL", "https://madam-dudu-astro-core-1.onrender.com")
+if not SERVICE_KEY:
+    print("⚠️ WARNING: API_KEY not set. Set API_KEY in environment variables.")
 
-@app.get("/health")
-def health():
-    return {"ok": True, "service": "Madam Dudu Astro Core Unified", "version": "3.0.0"}
+# --- Geçici klasör oluştur (chart PNG saklama) ---
+TEMP_DIR = "/tmp/charts"
+os.makedirs(TEMP_DIR, exist_ok=True)
 
+# --- Statik dosyaları servis et (görseli URL olarak gösterebilmek için) ---
+app.mount("/charts", StaticFiles(directory=TEMP_DIR), name="charts")
 
+# --- Zaman damgasına göre eski dosyaları temizle ---
+def cleanup_old_files():
+    now = time.time()
+    for fname in os.listdir(TEMP_DIR):
+        fpath = os.path.join(TEMP_DIR, fname)
+        if os.path.isfile(fpath):
+            if now - os.path.getmtime(fpath) > 3600:  # 1 saat
+                os.remove(fpath)
+
+# --- Render Endpoint ---
 @app.post("/render")
 def render_chart(payload: dict = Body(...), Authorization: str | None = Header(default=None)):
-    """
-    Tek endpoint: hem gezegen konumlarını hesaplar (/compute),
-    hem de PNG olarak doğum haritası çizer.
-    """
-    # --- Güvenlik kontrolü ---
     if not SERVICE_KEY:
         raise HTTPException(500, detail="API_KEY not set on server.")
     if Authorization is None or not Authorization.startswith("Bearer "):
@@ -34,43 +51,42 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
     if Authorization.split(" ", 1)[1] != SERVICE_KEY:
         raise HTTPException(403, detail="Invalid API_KEY.")
 
-    # --- Giriş verileri kontrolü ---
-    name = payload.get("name", "Unknown")
-    dob = payload.get("dob")
-    tob = payload.get("tob")
-    city = payload.get("city")
-    country = payload.get("country")
-
-    if not all([dob, tob, city, country]):
-        raise HTTPException(400, detail="Missing required fields: dob, tob, city, country.")
-
-    # --- Eğer gezegen verileri yoksa, otomatik hesapla ---
     planets = payload.get("planets")
-    if not planets:
-        try:
-            # Sunucunun kendi içinden /compute fonksiyonunu çağır
-            from app import Input
-            i = Input(name=name, dob=dob, tob=tob, city=city, country=country)
-            compute_result = compute_fn(i, Authorization=f"Bearer {SERVICE_KEY}")
-            planets = []
-            planets.append({"name": "Sun", "ecliptic_long": compute_result["sun"]["ecliptic_long"]})
-            planets.append({"name": "Moon", "ecliptic_long": compute_result["moon"]["ecliptic_long"]})
-            for pname, pdata in compute_result["planets"].items():
-                planets.append({"name": pname, "ecliptic_long": pdata["ecliptic_long"]})
-        except Exception as e:
-            raise HTTPException(500, detail=f"Failed to auto-compute planets: {str(e)}")
+    if not isinstance(planets, list) or not planets:
+        raise HTTPException(400, detail="'planets' list is required.")
 
-    # --- Çizimi oluştur ---
-    img = draw_chart(
+    img_bytes = draw_chart(
         planets=planets,
-        name=name,
-        dob=dob,
-        tob=tob,
-        city=city,
-        country=country,
+        name=payload.get("name"),
+        dob=payload.get("dob"),
+        tob=payload.get("tob"),
+        city=payload.get("city"),
+        country=payload.get("country"),
     )
-    if isinstance(img, bytes):
-        img = BytesIO(img)
 
-    # --- PNG olarak döndür ---
-    return StreamingResponse(img, media_type="image/png", headers={"Cache-Control": "no-store"})
+    # Byte dönüştürme
+    if not isinstance(img_bytes, (bytes, bytearray)):
+        raise HTTPException(500, detail="draw_chart() did not return valid bytes.")
+
+    # Geçici PNG kaydet
+    cleanup_old_files()
+    file_id = uuid.uuid4().hex
+    file_path = os.path.join(TEMP_DIR, f"chart_{file_id}.png")
+    with open(file_path, "wb") as f:
+        f.write(img_bytes)
+
+    public_url = f"https://madam-dudu-astro-core-1.onrender.com/charts/chart_{file_id}.png"
+
+    # İki opsiyonlu dönüş:
+    # 1️⃣ Görsel direkt (StreamingResponse)
+    # 2️⃣ JSON içinde URL (kolay erişim için)
+    if payload.get("as_url", True):
+        return JSONResponse({"url": public_url})
+    else:
+        return StreamingResponse(io.BytesIO(img_bytes), media_type="image/png")
+
+# --- Sağlık kontrolü ---
+@app.get("/health")
+def unified_health():
+    return {"ok": True, "service": "Madam Dudu Astro Core Unified", "version": "3.0.0"}
+
