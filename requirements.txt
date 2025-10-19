@@ -4,5 +4,5 @@ requests
 python-dateutil
 pytz
 pydantic
-git+https://github.com/darkhorrow/pyswisseph.git
+pyswisseph
 Pillow
