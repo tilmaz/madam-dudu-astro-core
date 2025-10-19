@@ -67,6 +67,7 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
         if not isinstance(planets, list) or not planets:
             raise HTTPException(400, detail="'planets' list is required.")
 
+            try:
         img_bytes = draw_chart(
             planets=planets,
             name=payload.get("name"),
@@ -75,6 +76,12 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
             city=payload.get("city"),
             country=payload.get("country"),
         )
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"💥 DRAW_CHART ERROR:\n{tb}")
+        raise HTTPException(500, detail=f"Draw chart failed: {e}")
+
 
         # Byte dönüştürme
         if not isinstance(img_bytes, (bytes, bytearray)):
