@@ -35,7 +35,7 @@ def _clamp(pt, cx, cy, radius):
 def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     """
     planets: [{"name":"Sun","ecliptic_long":311.533}, ...]
-    returns: BytesIO (PNG)
+    returns: bytes (PNG)
     """
     # --- YEREL ŞABLON ve FONTLAR ---
     template_path = "chart_template.png"   # repo kökünde
@@ -93,11 +93,14 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
 
     # --- ALT BİLGİ ---
     if dob:
-        try: date_txt = datetime.strptime(dob, "%Y-%m-%d").strftime("%d %B %Y")
-        except: date_txt = dob
+        try:
+            date_txt = datetime.strptime(dob, "%Y-%m-%d").strftime("%d %B %Y")
+        except Exception:
+            date_txt = dob
     else:
         date_txt = ""
-    if tob: date_txt = (date_txt + f" @{tob}").strip()
+    if tob:
+        date_txt = (date_txt + f" @{tob}").strip()
     loc_txt = f"{city}/{country}" if (city and country) else (city or country or "")
 
     y0 = bg.height - 120
@@ -115,7 +118,10 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
         draw.text((70, yL), label, fill=col, font=small_font)
         yL += 38
 
+    # --- PNG oluşturma ---
     out = BytesIO()
     bg.save(out, format="PNG", optimize=True)
     out.seek(0)
-    return out
+
+    # ✅ BytesIO yerine ham bytes döndür
+    return out.getvalue()
