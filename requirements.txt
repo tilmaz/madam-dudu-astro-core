@@ -5,3 +5,4 @@ python-dateutil
 pytz
 pydantic
 swisseph
+Pillow
