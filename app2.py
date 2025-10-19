@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.DEBUG)
 # --- Ana Uygulama ---
 app = FastAPI(
     title="Madam Dudu Astro Core Unified",
-    version="3.0.0",
+    version="3.1.0",
     description="Unified API: combines computation (/compute) and rendering (/render) for Madam Dudu Astrology engine."
 )
 
@@ -39,10 +39,10 @@ try:
 except Exception as e:
     print(f"❌ Failed to create TEMP_DIR: {e}")
 
-# --- Statik dosyaları servis et (görseli URL olarak gösterebilmek için) ---
+# --- Statik dosyaları servis et (görseli ve logları göstermek için) ---
 app.mount("/charts", StaticFiles(directory=TEMP_DIR), name="charts")
 
-# --- Zaman damgasına göre eski dosyaları temizle ---
+# --- Eski dosyaları temizle ---
 def cleanup_old_files():
     now = time.time()
     for fname in os.listdir(TEMP_DIR):
@@ -84,6 +84,15 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
         except Exception as e:
             tb = traceback.format_exc()
             print(f"💥 DRAW_CHART ERROR:\n{tb}")
+            try:
+                log_path = os.path.join(TEMP_DIR, "errors.log")
+                with open(log_path, "a") as log_file:
+                    log_file.write("\n\n==== DRAW_CHART ERROR ====\n")
+                    log_file.write(tb)
+                    log_file.write("\n===========================\n")
+                print(f"🧾 Error saved to {log_path}")
+            except Exception as log_err:
+                print(f"⚠️ Could not write error log: {log_err}")
             raise HTTPException(500, detail=f"Draw chart failed: {e}")
 
         # --- Byte dönüşüm kontrolü ---
@@ -117,9 +126,17 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
         # Genel hata yakalayıcı
         error_detail = traceback.format_exc()
         print(f"💥 Internal Server Error:\n{error_detail}")
+        try:
+            log_path = os.path.join(TEMP_DIR, "errors.log")
+            with open(log_path, "a") as log_file:
+                log_file.write("\n\n==== INTERNAL ERROR ====\n")
+                log_file.write(error_detail)
+                log_file.write("\n=========================\n")
+        except Exception as log_err:
+            print(f"⚠️ Could not write internal error log: {log_err}")
         raise HTTPException(500, detail=f"Unexpected server error: {str(e)}")
 
 # --- Sağlık kontrolü ---
 @app.get("/health")
 def unified_health():
-    return {"ok": True, "service": "Madam Dudu Astro Core Unified", "version": "3.0.0"}
+    return {"ok": True, "service": "Madam Dudu Astro Core Unified", "version": "3.1.0"}
