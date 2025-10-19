@@ -10,8 +10,10 @@ import io
 import uuid
 import time
 import traceback
+import logging
+
 # --- Logging ayarı ---
-logging.basicConfig(level=logging.DEBUG)  #
+logging.basicConfig(level=logging.DEBUG)
 
 # --- Ana Uygulama ---
 app = FastAPI(
@@ -56,6 +58,7 @@ def cleanup_old_files():
 @app.post("/render")
 def render_chart(payload: dict = Body(...), Authorization: str | None = Header(default=None)):
     try:
+        # --- API key kontrolü ---
         if not SERVICE_KEY:
             raise HTTPException(500, detail="API_KEY not set on server.")
         if Authorization is None or not Authorization.startswith("Bearer "):
@@ -63,31 +66,31 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
         if Authorization.split(" ", 1)[1] != SERVICE_KEY:
             raise HTTPException(403, detail="Invalid API_KEY.")
 
+        # --- Planet verisi kontrolü ---
         planets = payload.get("planets")
         if not isinstance(planets, list) or not planets:
             raise HTTPException(400, detail="'planets' list is required.")
 
-            try:
-        img_bytes = draw_chart(
-            planets=planets,
-            name=payload.get("name"),
-            dob=payload.get("dob"),
-            tob=payload.get("tob"),
-            city=payload.get("city"),
-            country=payload.get("country"),
-        )
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print(f"💥 DRAW_CHART ERROR:\n{tb}")
-        raise HTTPException(500, detail=f"Draw chart failed: {e}")
+        # --- draw_chart() güvenli çağırma ---
+        try:
+            img_bytes = draw_chart(
+                planets=planets,
+                name=payload.get("name"),
+                dob=payload.get("dob"),
+                tob=payload.get("tob"),
+                city=payload.get("city"),
+                country=payload.get("country"),
+            )
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"💥 DRAW_CHART ERROR:\n{tb}")
+            raise HTTPException(500, detail=f"Draw chart failed: {e}")
 
-
-        # Byte dönüştürme
+        # --- Byte dönüşüm kontrolü ---
         if not isinstance(img_bytes, (bytes, bytearray)):
             raise HTTPException(500, detail="draw_chart() did not return valid bytes.")
 
-        # Geçici PNG kaydet
+        # --- Geçici PNG kaydet ---
         cleanup_old_files()
         file_id = uuid.uuid4().hex
         file_path = os.path.join(TEMP_DIR, f"chart_{file_id}.png")
@@ -99,9 +102,10 @@ def render_chart(payload: dict = Body(...), Authorization: str | None = Header(d
             print(f"❌ Failed to write file: {e}")
             raise HTTPException(500, detail=f"Could not write file to {TEMP_DIR}")
 
+        # --- Public URL oluştur ---
         public_url = f"https://madam-dudu-astro-core-1.onrender.com/charts/chart_{file_id}.png"
 
-        # JSON veya görsel direkt dönüş
+        # --- JSON veya direkt görsel döndür ---
         if payload.get("as_url", True):
             return JSONResponse({"url": public_url})
         else:
