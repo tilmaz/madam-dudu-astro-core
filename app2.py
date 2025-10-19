@@ -10,6 +10,8 @@ import io
 import uuid
 import time
 import traceback
+# --- Logging ayarı ---
+logging.basicConfig(level=logging.DEBUG)  #
 
 # --- Ana Uygulama ---
 app = FastAPI(
