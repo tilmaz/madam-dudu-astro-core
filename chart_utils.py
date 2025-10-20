@@ -1,79 +1,121 @@
 import os
 import math
+import datetime
 from PIL import Image, ImageDraw, ImageFont
+import logging
 
-def draw_chart(name, dob, tob, city, country, planets, houses):
-    # --- Dosya yollarını dinamik belirle ---
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(base_dir, "chart_template.png")
-    font_path_astro = os.path.join(base_dir, "AstroGadget.ttf")
+# 🔹 Log ayarları
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    # --- Font yükleme ---
+def draw_chart(planets, name, dob, tob, city, country):
+    """
+    Debug log’lu natal chart çizimi.
+    Her adım Render loglarına yazılır.
+    """
+
+    logging.info("=== 🌌 DRAW_CHART STARTED ===")
+    logging.info(f"Name: {name}, DOB: {dob}, TOB: {tob}, Location: {city}, {country}")
+
+    # 🟣 Template dosyasını yükle
+    template_path = "chart_template.png"
+    if not os.path.exists(template_path):
+        logging.error(f"❌ Template bulunamadı: {template_path}")
+        return {"error": f"Template not found: {template_path}"}
+
     try:
-        astro_font = ImageFont.truetype(font_path_astro, 48)
-    except OSError:
-        from PIL import ImageFont
+        base = Image.open(template_path).convert("RGBA")
+        logging.info("✅ Template başarıyla yüklendi.")
+    except Exception as e:
+        logging.exception("❌ Template yükleme hatası:")
+        return {"error": f"Template load error: {str(e)}"}
+
+    draw = ImageDraw.Draw(base)
+
+    # 🟣 Font yükleme (AstroGadget + Yazı fontu)
+    astro_font_path = "AstroGadget.ttf"
+    text_font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+    try:
+        astro_font = ImageFont.truetype(astro_font_path, 28)
+        logging.info("✅ Astro font yüklendi.")
+    except Exception as e:
+        logging.warning(f"⚠️ Astro font yüklenemedi ({astro_font_path}): {str(e)}")
         astro_font = ImageFont.load_default()
 
     try:
-        title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 52)
-        info_font = ImageFont.truetype("DejaVuSans.ttf", 36)
-    except:
-        title_font = ImageFont.load_default()
-        info_font = ImageFont.load_default()
+        text_font = ImageFont.truetype(text_font_path, 28)
+        logging.info("✅ Text font yüklendi.")
+    except Exception as e:
+        logging.warning(f"⚠️ Text font yüklenemedi ({text_font_path}): {str(e)}")
+        text_font = ImageFont.load_default()
 
-    # --- Template aç ---
-    base = Image.open(template_path).convert("RGBA")
-    draw = ImageDraw.Draw(base)
+    # 🟣 Görsel boyut bilgisi
     w, h = base.size
+    center = (w / 2, h / 2)
+    logging.info(f"🖼️ Template boyutu: {w}x{h}")
 
-    # --- Başlık ---
-    title = f"{name}'s Natal Chart"
-    tw, th = draw.textsize(title, font=title_font)
-    draw.text(((w - tw) / 2, 30), title, fill=(160, 110, 255), font=title_font)
+    # 🟣 Başlık (Mor renkte)
+    title = f"{name}'s Natal Birth Chart"
+    title_color = (140, 80, 255)
+    title_y = 60
+    draw.text((center[0] - len(title) * 7, title_y), title, fill=title_color, font=text_font)
+    logging.info("✅ Başlık çizildi.")
 
-    # --- Alt Bilgi ---
-    months = ["January", "February", "March", "April", "May", "June",
-              "July", "August", "September", "October", "November", "December"]
-    y, m, d = dob.split("-")
-    m_name = months[int(m) - 1]
-    date_str = f"{int(d)} {m_name} {y} @{tob}"
-    loc_str = f"{city}, {country}"
+    # 🟣 Alt bilgi: tarih, saat, şehir
+    bottom_text_1 = f"{dob} @ {tob}"
+    bottom_text_2 = f"{city}, {country}"
+    bottom_color = (140, 80, 255)
 
-    dw, dh = draw.textsize(date_str, font=info_font)
-    lw, lh = draw.textsize(loc_str, font=info_font)
+    draw.text((center[0] - len(bottom_text_1) * 7, h - 140), bottom_text_1, fill=bottom_color, font=text_font)
+    draw.text((center[0] - len(bottom_text_2) * 7, h - 100), bottom_text_2, fill=bottom_color, font=text_font)
+    logging.info("✅ Alt bilgi çizildi.")
 
-    draw.text(((w - dw) / 2, h - 160), date_str, fill=(160, 110, 255), font=info_font)
-    draw.text(((w - lw) / 2, h - 100), loc_str, fill=(160, 110, 255), font=info_font)
-
-    # --- Aspect çizgileri ve gezegen pozisyonları ---
-    cx, cy = w / 2, h / 2
-    radius = min(w, h) * 0.4
-
+    # 🟣 Gezegen yerleşimleri (örnek noktalar)
+    radius = min(w, h) * 0.35
+    planet_positions = []
     for planet in planets:
-        lon = math.radians(planet["ecliptic_long"])
-        px = cx + radius * math.cos(math.pi / 2 - lon)
-        py = cy - radius * math.sin(math.pi / 2 - lon)
-        symbol = {
-            "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀",
-            "Mars": "♂", "Jupiter": "♃", "Saturn": "♄",
-            "Uranus": "♅", "Neptune": "♆", "Pluto": "♇"
-        }.get(planet["name"], planet["name"][0])
-        draw.text((px - 15, py - 15), symbol, fill=(160, 110, 255), font=astro_font)
+        angle_deg = planet["ecliptic_long"]
+        angle_rad = math.radians(angle_deg)
+        x = center[0] + radius * math.cos(math.radians(90 - angle_deg))
+        y = center[1] - radius * math.sin(math.radians(90 - angle_deg))
+        planet_positions.append((x, y))
+        draw.ellipse((x - 8, y - 8, x + 8, y + 8), fill=(180, 0, 255, 255))
+        draw.text((x + 10, y - 10), planet["name"][0], fill="white", font=astro_font)
 
-    # --- Aspect legend ---
-    legend_y = h - 260
-    legend_x = 50
-    aspects = [("Conjunction", "yellow"), ("Sextile", "green"),
-               ("Square", "red"), ("Trine", "blue"), ("Opposition", "purple")]
-    for name, color in aspects:
-        draw.line([(legend_x, legend_y + 10), (legend_x + 50, legend_y + 10)], fill=color, width=4)
-        draw.text((legend_x + 70, legend_y - 10), name, fill=(160, 110, 255), font=info_font)
-        legend_y += 50
+    logging.info(f"✅ {len(planet_positions)} gezegen çizildi.")
 
-    # --- Kaydet ---
-    output_filename = f"chart_{name.lower()}_final.png"
-    output_path = os.path.join(base_dir, output_filename)
-    base.save(output_path)
+    # 🟣 Aspect çizgileri (örnek)
+    for i in range(len(planet_positions)):
+        for j in range(i + 1, len(planet_positions)):
+            dx = planets[i]["ecliptic_long"] - planets[j]["ecliptic_long"]
+            if abs(dx) in [60, 90, 120, 180]:
+                color = (255, 0, 0, 150) if abs(dx) == 180 else (0, 255, 255, 120)
+                draw.line([planet_positions[i], planet_positions[j]], fill=color, width=2)
+    logging.info("✅ Aspect çizgileri oluşturuldu.")
 
-    return output_path
+    # 🟣 Çizgi renk açıklaması (legend)
+    legend_y = h - 60
+    legend_text = "Aspects: 🔴 Opposition | 🔵 Trine | 🟢 Sextile | ⚪ Conjunction | 🟣 Square"
+    draw.text((center[0] - len(legend_text) * 7, legend_y), legend_text, fill=(255, 255, 255), font=text_font)
+    logging.info("✅ Legend çizildi.")
+
+    # 🟣 Görseli kaydet
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"chart_{name.lower()}_{timestamp}.png"
+    output_dir = "charts"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, output_filename)
+
+    try:
+        base.save(output_path)
+        logging.info(f"✅ Chart başarıyla kaydedildi: {output_path}")
+    except Exception as e:
+        logging.exception("❌ Görsel kaydetme hatası:")
+        return {"error": f"Save error: {str(e)}"}
+
+    logging.info("=== ✅ DRAW_CHART TAMAMLANDI ===")
+
+    return {
+        "chart_url": f"/charts/{output_filename}",
+        "message": "Chart successfully generated with debug logs."
+    }
