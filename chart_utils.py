@@ -1,9 +1,23 @@
-import os
 import math
-from datetime import datetime
+import os
 from PIL import Image, ImageDraw, ImageFont
 
-# 🪐 Gezegen sembolleri
+# ===========================
+# CHART CONFIGURATION
+# ===========================
+TEMPLATE_PATH = "chart_template.png"
+CHARTS_DIR = "charts"
+FONT_PATH = "AstroGadget.ttf"
+DEFAULT_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+ASPECT_COLORS = {
+    "conjunction": (255, 255, 255),  # white
+    "opposition": (255, 0, 0),       # red
+    "trine": (0, 102, 255),          # blue
+    "square": (255, 165, 0),         # orange
+    "sextile": (0, 255, 0)           # green
+}
+
 PLANET_SYMBOLS = {
     "Sun": "☉",
     "Moon": "☽",
@@ -17,109 +31,116 @@ PLANET_SYMBOLS = {
     "Pluto": "♇"
 }
 
-# 🔵 Aspect açıları ve renkleri
-ASPECTS = {
-    "Conjunction": {"angle": 0, "color": (255, 255, 255)},   # beyaz
-    "Opposition": {"angle": 180, "color": (255, 0, 0)},      # kırmızı
-    "Trine": {"angle": 120, "color": (0, 128, 255)},         # mavi
-    "Square": {"angle": 90, "color": (255, 165, 0)},         # turuncu
-    "Sextile": {"angle": 60, "color": (255, 0, 255)}         # mor
-}
+
+def get_font(size):
+    """Try Astro font, fall back to DejaVuSans."""
+    try:
+        return ImageFont.truetype(FONT_PATH, size)
+    except:
+        return ImageFont.truetype(DEFAULT_FONT, size)
+
+
+def draw_text_center(draw, text, xy, font, fill=(255, 255, 255)):
+    """Draw centered text with textbbox() support."""
+    bbox = draw.textbbox(xy, text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    x, y = xy
+    draw.text((x - text_w / 2, y - text_h / 2), text, font=font, fill=fill)
 
 
 def draw_chart(planets, name, dob, tob, city, country):
-    """Doğum haritası görselini oluşturur ve kaydeder."""
+    """Draws natal chart with title, aspect lines, and planet symbols."""
+    if not os.path.exists(CHARTS_DIR):
+        os.makedirs(CHARTS_DIR)
 
-    # 🖼️ Görsel ayarları
-    width, height = 1000, 1000
-    center = (width // 2, height // 2)
-    radius = 400
+    template = Image.open(TEMPLATE_PATH).convert("RGBA")
+    draw = ImageDraw.Draw(template)
+    W, H = template.size
+    cx, cy = W // 2, H // 2
 
-    img = Image.new("RGB", (width, height), "white")
-    draw = ImageDraw.Draw(img)
+    # Chart circle radius
+    radius = min(W, H) * 0.42
+    planet_radius = radius * 0.85
 
-    # 🟠 Ana çember
-    draw.ellipse(
-        (center[0] - radius, center[1] - radius,
-         center[0] + radius, center[1] + radius),
-        outline="black", width=3
-    )
+    # --------------------------
+    # Planet Positions
+    # --------------------------
+    coords = {}
+    for planet in planets:
+        angle_deg = planet["ecliptic_long"]
+        angle_rad = math.radians(angle_deg - 90)
+        x = cx + planet_radius * math.cos(angle_rad)
+        y = cy + planet_radius * math.sin(angle_rad)
+        coords[planet["name"]] = (x, y)
 
-    # 🔵 İç çember (ev sınırı)
-    draw.ellipse(
-        (center[0] - radius // 3, center[1] - radius // 3,
-         center[0] + radius // 3, center[1] + radius // 3),
-        outline="gray", width=2
-    )
+        # Draw planet symbol
+        symbol = PLANET_SYMBOLS.get(planet["name"], "?")
+        planet_font = get_font(40)
+        draw_text_center(draw, symbol, (x, y), planet_font, fill="#AA66FF")
 
-    # ⚪ 12 burç çizgisi
-    for i in range(12):
-        angle = math.radians(i * 30)
-        x = center[0] + radius * math.cos(angle)
-        y = center[1] - radius * math.sin(angle)
-        draw.line((center[0], center[1], x, y), fill="gray", width=1)
+    # --------------------------
+    # Aspect Lines
+    # --------------------------
+    def angle_diff(a, b):
+        d = abs(a - b) % 360
+        return min(d, 360 - d)
 
-    # ✳️ Gezegenleri yerleştir
-    planet_font = ImageFont.load_default()
-    planet_radius = radius * 0.85  # %15 içeri
-    planet_positions = {}
-
-    for p in planets:
-        if p.get("ecliptic_long") is None:
-            continue
-
-        angle = math.radians(360 - p["ecliptic_long"])
-        x = center[0] + planet_radius * math.cos(angle)
-        y = center[1] - planet_radius * math.sin(angle)
-        planet_positions[p["name"]] = (x, y)
-
-        symbol = PLANET_SYMBOLS.get(p["name"], "?")
-        bbox = draw.textbbox((0, 0), symbol, font=planet_font)
-        w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        draw.text((x - w / 2, y - h / 2), symbol, fill=(138, 43, 226), font=planet_font)
-
-    # 🔺 Aspect çizgileri
-    planet_names = list(planet_positions.keys())
-    for i in range(len(planet_names)):
-        for j in range(i + 1, len(planet_names)):
-            p1, p2 = planet_names[i], planet_names[j]
-            a1 = next((pl["ecliptic_long"] for pl in planets if pl["name"] == p1), None)
-            a2 = next((pl["ecliptic_long"] for pl in planets if pl["name"] == p2), None)
-            if a1 is None or a2 is None:
+    for p1 in planets:
+        for p2 in planets:
+            if p1["name"] == p2["name"]:
                 continue
-            diff = abs(a1 - a2)
-            diff = min(diff, 360 - diff)
-            for asp, info in ASPECTS.items():
-                if abs(diff - info["angle"]) < 4:
-                    draw.line([planet_positions[p1], planet_positions[p2]], fill=info["color"], width=2)
-                    break
+            diff = angle_diff(p1["ecliptic_long"], p2["ecliptic_long"])
+            color = None
+            if abs(diff - 0) < 8:
+                color = ASPECT_COLORS["conjunction"]
+            elif abs(diff - 60) < 6:
+                color = ASPECT_COLORS["sextile"]
+            elif abs(diff - 90) < 6:
+                color = ASPECT_COLORS["square"]
+            elif abs(diff - 120) < 6:
+                color = ASPECT_COLORS["trine"]
+            elif abs(diff - 180) < 8:
+                color = ASPECT_COLORS["opposition"]
+            if color:
+                draw.line([coords[p1["name"]], coords[p2["name"]]], fill=color, width=2)
 
-    # 🧭 Başlık
-    title_font = ImageFont.load_default()
+    # --------------------------
+    # Title & Footer
+    # --------------------------
+    title_font = get_font(48)
+    info_font = get_font(28)
+    legend_font = get_font(22)
+
+    # Title
     title_text = f"{name}'s Natal Birth Chart"
-    bbox = draw.textbbox((0, 0), title_text, font=title_font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    draw.text((center[0] - tw / 2, 50), title_text, fill="black", font=title_font)
+    draw_text_center(draw, title_text, (cx, 50), title_font, fill="white")
 
-    # 📅 Alt Bilgi
-    info_font = ImageFont.load_default()
-    info_y = height - 80
-    draw.text((80, info_y), f"Date of Birth: {dob}  Time: {tob}", fill="black", font=info_font)
-    draw.text((80, info_y + 20), f"Place of Birth: {city}, {country}", fill="black", font=info_font)
+    # Footer info
+    footer_text1 = f"Born on {dob} at {tob}"
+    footer_text2 = f"{city}, {country}"
+    draw_text_center(draw, footer_text1, (cx, H - 90), info_font, fill="white")
+    draw_text_center(draw, footer_text2, (cx, H - 55), info_font, fill="white")
 
-    # 🌈 Aspect Legend
-    legend_y = height - 50
-    x_pos = 80
-    for asp, data in ASPECTS.items():
-        draw.rectangle([x_pos, legend_y, x_pos + 15, legend_y + 15], fill=data["color"])
-        draw.text((x_pos + 25, legend_y), asp, fill="black", font=info_font)
-        x_pos += 110
+    # Legend
+    legend_y = H - 25
+    legend_x = 40
+    legends = [
+        ("Conjunction", "⚪", ASPECT_COLORS["conjunction"]),
+        ("Opposition", "🔴", ASPECT_COLORS["opposition"]),
+        ("Trine", "🔵", ASPECT_COLORS["trine"]),
+        ("Square", "🟠", ASPECT_COLORS["square"]),
+        ("Sextile", "🟢", ASPECT_COLORS["sextile"]),
+    ]
+    x_offset = legend_x
+    for label, symbol, color in legends:
+        text = f"{symbol} {label}"
+        draw.text((x_offset, legend_y), text, font=legend_font, fill=color)
+        x_offset += draw.textlength(text, font=legend_font) + 40
 
-    # 💾 Görseli kaydet
-    os.makedirs("charts", exist_ok=True)
-    filename = f"chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-    output_path = os.path.join("charts", filename)
-    img.save(output_path, "PNG")
+    # Save
+    filename = f"chart_{name.lower()}_{dob.replace('-', '')}.png"
+    path = os.path.join(CHARTS_DIR, filename)
+    template.save(path, "PNG")
 
-    # 🌐 URL döndür
-    return {"chart_url": f"https://madam-dudu-astro-core-1.onrender.com/charts/{filename}"}
+    return {"url": f"/charts/{filename}", "status": "ok"}
