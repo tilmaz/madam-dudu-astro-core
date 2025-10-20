@@ -237,3 +237,13 @@ def get_chart(filename: str):
     if not os.path.exists(path):
         raise HTTPException(404, detail="Chart not found or expired.")
     return FileResponse(path, media_type="image/png")
+    from fastapi.responses import JSONResponse
+
+@app.get("/debug/check-template")
+async def check_template():
+    import os
+    path = os.path.join(os.path.dirname(__file__), "chart_template.png")
+    exists = os.path.exists(path)
+    size = os.path.getsize(path) if exists else 0
+    return JSONResponse(content={"exists": exists, "size_bytes": size, "path": path})
+
