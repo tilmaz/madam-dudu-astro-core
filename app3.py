@@ -88,3 +88,7 @@ async def root():
             "/render": "Doğum haritası oluşturur"
         }
     }
+    if not os.path.exists("charts"):
+    os.makedirs("charts")
+app.mount("/charts", StaticFiles(directory="charts"), name="charts")
+
