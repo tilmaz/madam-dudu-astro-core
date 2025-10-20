@@ -9,7 +9,6 @@ PLANET_SYMBOLS = {
     "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇"
 }
 
-# Aspect türleri ve renkleri
 ASPECTS = {
     "conjunction": ((0, 255, 0), "Conjunction (0°)"),
     "opposition": ((255, 0, 0), "Opposition (180°)"),
@@ -39,49 +38,50 @@ def find_aspects(planets):
 
 
 def get_text_size(draw, text, font):
-    """Pillow 10+ uyumlu metin ölçümü (textsize yerine)"""
     bbox = draw.textbbox((0, 0), text, font=font)
-    width = bbox[2] - bbox[0]
-    height = bbox[3] - bbox[1]
-    return width, height
+    return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
 
 def draw_chart(planets, name="User", dob="", tob="", city="", country=""):
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         template_path = os.path.join(base_dir, "chart_template.png")
-        font_path = os.path.join(base_dir, "AstroGadget.ttf")
+        astro_font_path = os.path.join(base_dir, "AstroGadget.ttf")
         charts_dir = os.path.join(base_dir, "charts")
         os.makedirs(charts_dir, exist_ok=True)
 
         base_image = Image.open(template_path).convert("RGBA")
         W, H = base_image.size
         draw = ImageDraw.Draw(base_image, "RGBA")
-        center_x, center_y = W // 2, H // 2
-        radius = min(center_x, center_y) - 60
-        inner_radius = radius * 0.85  # Gezegenleri biraz daha içeri alıyoruz
+        cx, cy = W // 2, H // 2
+        radius = min(cx, cy) - 60
+        inner_radius = radius * 0.85
 
         # Fontlar
         try:
-            font = ImageFont.truetype(font_path, 32)
-            info_font = ImageFont.truetype(font_path, 22)
-            title_font = ImageFont.truetype(font_path, 36)
+            text_font = ImageFont.truetype("DejaVuSans.ttf", 28)
         except Exception:
-            font = ImageFont.load_default()
-            info_font = ImageFont.load_default()
-            title_font = ImageFont.load_default()
+            text_font = ImageFont.load_default()
+
+        try:
+            astro_font = ImageFont.truetype(astro_font_path, 34)
+        except Exception:
+            astro_font = ImageFont.load_default()
+
+        title_font = text_font
+        info_font = ImageFont.truetype("DejaVuSans.ttf", 22) if text_font != ImageFont.load_default() else text_font
 
         # Gezegen konumları
         coords = {}
-        for planet in planets:
-            val = planet.get("ecliptic_long")
+        for p in planets:
+            val = p.get("ecliptic_long")
             if val is None:
                 continue
             angle_deg = float(val) - 90
             angle_rad = math.radians(angle_deg)
-            x = center_x + inner_radius * math.cos(angle_rad)
-            y = center_y + inner_radius * math.sin(angle_rad)
-            coords[planet["name"]] = (x, y)
+            x = cx + inner_radius * math.cos(angle_rad)
+            y = cy + inner_radius * math.sin(angle_rad)
+            coords[p["name"]] = (x, y)
 
         # Aspect çizgileri
         aspects = find_aspects(planets)
@@ -93,44 +93,44 @@ def draw_chart(planets, name="User", dob="", tob="", city="", country=""):
             x2, y2 = coords[p2["name"]]
             draw.line((x1, y1, x2, y2), fill=color + (160,), width=2)
 
-        # Gezegen sembolleri (mor renk)
-        for planet in planets:
-            name_p = planet["name"]
-            if name_p not in coords:
+        # Gezegen sembolleri (mor)
+        for p in planets:
+            n = p["name"]
+            if n not in coords:
                 continue
-            x, y = coords[name_p]
-            symbol = PLANET_SYMBOLS.get(name_p, name_p[0])
-            draw.text((x - 10, y - 10), symbol, fill=(180, 80, 255), font=font)
+            x, y = coords[n]
+            symbol = PLANET_SYMBOLS.get(n, n[0])
+            draw.text((x - 10, y - 10), symbol, fill=(180, 80, 255), font=astro_font)
 
         # Başlık
         title_text = f"{name}'s Natal Birth Chart"
         tw, th = get_text_size(draw, title_text, title_font)
-        draw.text(((W - tw) / 2, 20), title_text, fill=(50, 50, 50), font=title_font)
+        draw.text(((W - tw) / 2, 20), title_text, fill=(30, 30, 30), font=title_font)
 
         # Alt Bilgiler
         info_y = H - 120
-        info_text1 = f"Date of Birth: {dob}    Time: {tob}"
-        info_text2 = f"Place of Birth: {city}, {country}"
-        tw1, _ = get_text_size(draw, info_text1, info_font)
-        tw2, _ = get_text_size(draw, info_text2, info_font)
-        draw.text(((W - tw1) / 2, info_y), info_text1, fill=(30, 30, 30), font=info_font)
-        draw.text(((W - tw2) / 2, info_y + 30), info_text2, fill=(30, 30, 30), font=info_font)
+        info1 = f"Date of Birth: {dob}   Time: {tob}"
+        info2 = f"Place of Birth: {city}, {country}"
+        w1, _ = get_text_size(draw, info1, info_font)
+        w2, _ = get_text_size(draw, info2, info_font)
+        draw.text(((W - w1) / 2, info_y), info1, fill=(30, 30, 30), font=info_font)
+        draw.text(((W - w2) / 2, info_y + 30), info2, fill=(30, 30, 30), font=info_font)
 
-        # Aspect açıklamaları (alt kısım)
+        # Aspect açıklamaları
         legend_y = H - 50
         x_offset = 60
-        for aspect_name, (color, label) in ASPECTS.items():
+        for asp, (color, label) in ASPECTS.items():
             draw.rectangle((x_offset, legend_y, x_offset + 20, legend_y + 10), fill=color + (200,))
-            draw.text((x_offset + 30, legend_y - 5), label, fill=(50, 50, 50), font=info_font)
+            draw.text((x_offset + 30, legend_y - 5), label, fill=(40, 40, 40), font=info_font)
             x_offset += 220
 
-        # Dosya kaydetme
+        # Kaydet
         filename = f"chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        file_path = os.path.join(charts_dir, filename)
-        base_image.save(file_path, "PNG")
+        path = os.path.join(charts_dir, filename)
+        base_image.save(path, "PNG")
 
         chart_url = f"https://madam-dudu-astro-core-1.onrender.com/charts/{filename}"
-        print(f"[draw_chart] ✅ Chart created at: {chart_url}")
+        print(f"[draw_chart] ✅ Chart created: {chart_url}")
         return {"chart_url": chart_url}
 
     except Exception as e:
