@@ -8,24 +8,18 @@ import os
 app = FastAPI(
     title="Madam Dudu Astro Core Unified",
     description="Unified astrology engine for Madam Dudu GPT.",
-    version="3.3.1"
+    version="3.5.0"
 )
 
-# ✅ Statik dosyalar klasörü (chart görüntüleri)
-CHARTS_DIR = os.path.join(os.getcwd(), "charts")
+# ✅ Statik dosya servisi
+if not os.path.exists("charts"):
+    os.makedirs("charts")
+app.mount("/charts", StaticFiles(directory="charts"), name="charts")
 
-if not os.path.exists(CHARTS_DIR):
-    os.makedirs(CHARTS_DIR)
-
-# 🔧 Render'da tam yol kullanarak statik dosya bağla
-app.mount("/charts", StaticFiles(directory=CHARTS_DIR), name="charts")
-
-
-# 🔹 Model tanımları
+# 🔹 Modeller
 class Planet(BaseModel):
     name: str
     ecliptic_long: float
-
 
 class ChartRequest(BaseModel):
     name: str
@@ -35,34 +29,26 @@ class ChartRequest(BaseModel):
     country: str
     planets: list[Planet]
 
-
-# 🔹 Sağlık testi (Render kontrolü)
+# 🔹 Sağlık testi
 @app.get("/health")
 async def health_check():
-    """Render servisinin çalıştığını doğrular."""
     return {
         "status": "ok",
         "service": "Madam Dudu Astro Core",
         "message": "Render servisi aktif ve çalışıyor 🚀"
     }
 
-
-# 🔹 Debug endpoint (compute testi)
+# 🔹 Compute test endpoint
 @app.post("/compute")
 async def compute_chart(data: dict):
-    """Test amaçlı hesaplama endpoint’i."""
     return {
         "message": "Compute endpoint aktif (Render test modunda).",
         "input": data
     }
 
-
-# 🔹 Doğum haritası oluşturma
+# 🔹 Render endpoint
 @app.post("/render")
 async def render_chart(request: ChartRequest):
-    """
-    Doğum haritasını çizer, PNG olarak kaydeder ve URL döndürür.
-    """
     try:
         chart_data = draw_chart(
             planets=[p.dict() for p in request.planets],
@@ -72,19 +58,21 @@ async def render_chart(request: ChartRequest):
             city=request.city,
             country=request.country
         )
-        return chart_data
+        # 🔗 Doğru URL formatı
+        return {
+            "status": "ok",
+            "url": f"https://madam-dudu-astro-core-1.onrender.com{chart_data['url']}"
+        }
     except Exception as e:
         return JSONResponse(
             status_code=500,
             content={"error": str(e), "message": "Chart render sırasında hata oluştu."}
         )
 
-
-# 🔹 Ana sayfa (isteğe bağlı açıklama)
 @app.get("/")
 async def root():
     return {
-        "message": "🌌 Madam Dudu Astro Core API v3.3.1",
+        "message": "🌌 Madam Dudu Astro Core API v3.5.0",
         "routes": {
             "/health": "Servis durumu kontrolü",
             "/compute": "Gezegen verisi testi",
