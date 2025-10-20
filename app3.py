@@ -2,10 +2,12 @@ import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from chart_utils import draw_chart
 
 app = FastAPI(title="Madam Dudu Astro Core Unified")
 
+# 🌐 CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,13 +15,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 🖼️ STATIC FILE SERVING (charts klasörü)
+charts_path = os.path.join(os.path.dirname(__file__), "charts")
+os.makedirs(charts_path, exist_ok=True)
+app.mount("/charts", StaticFiles(directory=charts_path), name="charts")
+
 
 @app.get("/health")
 async def health():
     return {
         "ok": True,
         "service": "Madam Dudu Astro Core Unified",
-        "version": "3.2.0-debug"
+        "version": "3.2.0"
     }
 
 
@@ -27,11 +34,9 @@ async def health():
 async def compute_chart(request: Request):
     try:
         data = await request.json()
-        # Dummy simulation (Render test only)
-        # Asıl compute işlemi ChatGPT plugin tarafında çalışıyor.
         return JSONResponse(
             content={
-                "message": "Compute endpoint aktif fakat bu ortamda harici astro hesaplama yapılmıyor.",
+                "message": "Compute endpoint aktif (Render test modunda).",
                 "input": data
             }
         )
@@ -47,14 +52,13 @@ async def render_chart(request: Request):
         if not planets:
             raise ValueError("Missing 'planets' in request body")
 
-        # Görsel oluştur
         result = draw_chart(planets)
         return JSONResponse(content=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 🔍 Debug endpoint: chart_template.png erişimini test eder
+# 🔍 DEBUG ENDPOINT: Template kontrol
 @app.get("/debug/check-template")
 async def check_template():
     import traceback
