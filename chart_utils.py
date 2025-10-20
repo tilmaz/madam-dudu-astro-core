@@ -1,50 +1,42 @@
 import os
+from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
-import math
-import datetime
 
-def draw_chart(planets, houses, ascendant, name, dob, tob, city, country, output_path=None):
-    # Dosya yolu dinamik hale getirildi (Render için kritik)
-    base_dir = os.path.dirname(__file__)
-    template_path = os.path.join(base_dir, "chart_template.png")
-    font_path = os.path.join(base_dir, "AstroGadget.ttf")
+def draw_chart(planets):
+    try:
+        # 🔧 Template path'i mutlak olarak belirt
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        template_path = os.path.join(base_dir, "chart_template.png")
 
-    # Template ve font yükle
-    bg = Image.open(template_path).convert("RGBA")
-    draw = ImageDraw.Draw(bg)
-    font = ImageFont.truetype(font_path, 20)
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(f"Template bulunamadı: {template_path}")
 
-    width, height = bg.size
-    center = (width // 2, height // 2)
-    radius = min(center) - 50
+        # 🔹 Template görselini aç
+        base_image = Image.open(template_path).convert("RGBA")
+        draw = ImageDraw.Draw(base_image)
 
-    # Planet sembollerini çiz
-    for planet, data in planets.items():
-        angle = math.radians(data["ecliptic_long"])
-        x = center[0] + radius * math.cos(angle)
-        y = center[1] + radius * math.sin(angle)
+        # 🔹 Her gezegen için pozisyon noktaları çiz
+        center_x, center_y = base_image.size[0] // 2, base_image.size[1] // 2
+        radius = min(center_x, center_y) - 40
 
-        draw.text((x - 10, y - 10), planet[0], fill="white", font=font)
+        for planet in planets:
+            angle_deg = planet["ecliptic_long"]
+            angle_rad = (angle_deg - 90) * 3.14159 / 180
+            x = center_x + radius * 0.9 * (1.0 * cos(angle_rad))
+            y = center_y + radius * 0.9 * (1.0 * sin(angle_rad))
+            draw.ellipse((x - 5, y - 5, x + 5, y + 5), fill="yellow", outline="black")
+            draw.text((x + 10, y - 10), planet["name"], fill="white")
 
-    # Ascendant çizgisi
-    asc_angle = math.radians(ascendant["ecliptic_long"])
-    asc_x = center[0] + radius * math.cos(asc_angle)
-    asc_y = center[1] + radius * math.sin(asc_angle)
-    draw.line([center, (asc_x, asc_y)], fill="yellow", width=2)
+        # 🔹 PNG olarak buffer’a yaz
+        output = BytesIO()
+        base_image.save(output, format="PNG")
+        output.seek(0)
+        return output
 
-    # Chart bilgilerini yaz
-    info_text = f"{name}\n{dob} {tob}\n{city}, {country}"
-    draw.text((20, height - 100), info_text, fill="white", font=font)
+    except Exception as e:
+        print(f"[draw_chart] ⚠️ Hata oluştu: {e}")
+        return None
 
-    # Kaydetme işlemi
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"chart_{timestamp}.png"
-    save_dir = os.path.join("/tmp", "charts")
-    os.makedirs(save_dir, exist_ok=True)
 
-    output_file = os.path.join(save_dir, filename)
-    bg.save(output_file)
-
-    print(f"[DEBUG] Chart saved at: {output_file}")
-
-    return output_file
+# 🔹 Sin, cos importlarını unutma
+from math import sin, cos
