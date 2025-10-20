@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
-from chart_utils import draw_chart
+from chart_utils_v6 import draw_chart
 import math
 
 app = FastAPI(
