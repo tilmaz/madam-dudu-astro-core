@@ -8,14 +8,17 @@ import os
 app = FastAPI(
     title="Madam Dudu Astro Core Unified",
     description="Unified astrology engine for Madam Dudu GPT.",
-    version="3.3.0"
+    version="3.3.1"
 )
 
 # ✅ Statik dosyalar klasörü (chart görüntüleri)
-if not os.path.exists("charts"):
-    os.makedirs("charts")
+CHARTS_DIR = os.path.join(os.getcwd(), "charts")
 
-app.mount("/charts", StaticFiles(directory="charts"), name="charts")
+if not os.path.exists(CHARTS_DIR):
+    os.makedirs(CHARTS_DIR)
+
+# 🔧 Render'da tam yol kullanarak statik dosya bağla
+app.mount("/charts", StaticFiles(directory=CHARTS_DIR), name="charts")
 
 
 # 🔹 Model tanımları
@@ -81,14 +84,10 @@ async def render_chart(request: ChartRequest):
 @app.get("/")
 async def root():
     return {
-        "message": "🌌 Madam Dudu Astro Core API v3.3.0",
+        "message": "🌌 Madam Dudu Astro Core API v3.3.1",
         "routes": {
             "/health": "Servis durumu kontrolü",
             "/compute": "Gezegen verisi testi",
             "/render": "Doğum haritası oluşturur"
         }
     }
-    if not os.path.exists("charts"):
-    os.makedirs("charts")
-app.mount("/charts", StaticFiles(directory="charts"), name="charts")
-
