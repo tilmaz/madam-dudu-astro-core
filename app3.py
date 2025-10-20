@@ -7,15 +7,15 @@ import os
 
 app = FastAPI(
     title="Madam Dudu Astro Core Unified",
-    description="Unified astrology engine for Madam Dudu GPT — v4.0 Final.",
-    version="4.0"
+    description="Unified astrology engine for Madam Dudu GPT — v4.0.1 FINAL",
+    version="4.0.1"
 )
 
 # ✅ Statik dosyalar klasörü (chart görüntüleri)
-if not os.path.exists("charts"):
-    os.makedirs("charts")
+charts_dir = os.path.join(os.getcwd(), "charts")
+os.makedirs(charts_dir, exist_ok=True)
 
-app.mount("/charts", StaticFiles(directory="charts"), name="charts")
+app.mount("/charts", StaticFiles(directory=charts_dir), name="charts")
 
 
 # 🔹 Model tanımları
@@ -36,7 +36,6 @@ class ChartRequest(BaseModel):
 # 🔹 Sağlık testi
 @app.get("/health")
 async def health_check():
-    """Render servisinin çalıştığını doğrular."""
     return {
         "status": "ok",
         "service": "Madam Dudu Astro Core",
@@ -44,24 +43,23 @@ async def health_check():
     }
 
 
-# 🔹 Compute test endpoint (veri kontrol)
+# 🔹 Compute test endpoint
 @app.post("/compute")
 async def compute_chart(data: dict):
-    """Test amaçlı hesaplama endpoint’i."""
     return {
         "message": "Compute endpoint aktif (Render test modunda).",
         "input": data
     }
 
 
-# 🔹 Doğum haritası oluşturma (ANA endpoint)
+# 🔹 Doğum haritası oluşturma
 @app.post("/render")
 async def render_chart(request: ChartRequest):
     """
-    Doğum haritasını çizer, PNG olarak kaydeder ve URL döndürür.
+    Doğum haritasını çizer, PNG olarak kaydeder ve erişilebilir URL döndürür.
     """
     try:
-        chart_data = draw_chart(
+        result = draw_chart(
             planets=[p.dict() for p in request.planets],
             name=request.name,
             dob=request.dob,
@@ -69,8 +67,19 @@ async def render_chart(request: ChartRequest):
             city=request.city,
             country=request.country
         )
-        # draw_chart fonksiyonundan {'url': ...} döner.
-        return chart_data
+
+        # Eğer draw_chart "charts/" ile başlayan path döndürdüyse
+        # onu tam URL haline getirelim:
+        file_url = result.get("url")
+        if not file_url.startswith("/"):
+            file_url = "/" + file_url
+
+        # 🔹 Render URL (tam erişim linki)
+        base_url = "https://madam-dudu-astro-core-1.onrender.com"
+        full_url = base_url + file_url
+
+        return {"url": full_url}
+
     except Exception as e:
         return JSONResponse(
             status_code=500,
@@ -85,10 +94,10 @@ async def render_chart(request: ChartRequest):
 @app.get("/")
 async def root():
     return {
-        "message": "🌌 Madam Dudu Astro Core API v4.0",
+        "message": "🌌 Madam Dudu Astro Core API v4.0.1",
         "routes": {
             "/health": "Servis durumu kontrolü",
             "/compute": "Gezegen verisi testi",
-            "/render": "Doğum haritası oluşturur (chart_utils.py v4.0)"
+            "/render": "Doğum haritası oluşturur (chart_utils v4.0-final)"
         }
     }
