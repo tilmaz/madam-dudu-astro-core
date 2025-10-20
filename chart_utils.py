@@ -1,111 +1,114 @@
 import math
-from PIL import Image, ImageDraw, ImageFont
-import datetime
 import os
+from datetime import datetime
+from PIL import Image, ImageDraw, ImageFont
+
+# Aspect açı aralıkları (derece)
+ASPECTS = {
+    "Conjunction": (0, 8, (255, 255, 255)),      # beyaz
+    "Sextile": (60, 6, (0, 255, 128)),           # yeşil
+    "Square": (90, 6, (255, 60, 60)),            # kırmızı
+    "Trine": (120, 6, (60, 120, 255)),           # mavi
+    "Opposition": (180, 8, (200, 200, 200)),     # gri
+}
+
+
+def angle_diff(a, b):
+    """İki gezegen arasındaki en kısa açı farkını hesapla."""
+    diff = abs(a - b) % 360
+    return diff if diff <= 180 else 360 - diff
+
 
 def draw_chart(planets, name, dob, tob, city, country):
-    """
-    Doğum haritasını çizer, başlık, semboller ve alt bilgileri yerleştirir (v3.5 Final Visual + Astro Fix).
-    """
+    size = 1400
+    pad_top, pad_bottom = 200, 260
+    total_h = size + pad_top + pad_bottom
 
-    # 📁 Dosya yolları
-    template_path = "chart_template.png"
-    astro_font_path = "AstroGadget.ttf"
-    normal_font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    img = Image.new("RGB", (size, total_h), (8, 8, 16))
+    draw = ImageDraw.Draw(img)
 
-    # 🎨 Renkler
-    MOR = (165, 102, 255, 255)
-    SIYAH = (20, 20, 20, 255)
-    GRAY = (80, 80, 80, 255)
-    WHITE = (255, 255, 255, 255)
+    cx, cy = size // 2, pad_top + size // 2
+    radius = size // 2 - 100
 
-    # 🌌 Template yükle
-    base_img = Image.open(template_path).convert("RGBA")
-    w, h = base_img.size
-
-    # Padding ekle
-    top_pad, bottom_pad = 100, 180
-    new_h = h + top_pad + bottom_pad
-    canvas = Image.new("RGBA", (w, new_h), WHITE)
-    canvas.paste(base_img, (0, top_pad), mask=base_img)
-    draw = ImageDraw.Draw(canvas)
-
-    # 🔤 Fontlar
+    # Fontlar
+    font_main = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
+    font_text = ImageFont.truetype("DejaVuSans.ttf", 26)
+    font_small = ImageFont.truetype("DejaVuSans.ttf", 20)
     try:
-        astro_font = ImageFont.truetype(astro_font_path, 38)
+        planet_font = ImageFont.truetype("AstroGadget.ttf", 42)
     except:
-        astro_font = ImageFont.load_default()
-
-    try:
-        title_font = ImageFont.truetype(normal_font_path, 42)
-        small_font = ImageFont.truetype(normal_font_path, 26)
-        mid_font = ImageFont.truetype(normal_font_path, 30)
-    except:
-        title_font = ImageFont.load_default()
-        small_font = ImageFont.load_default()
-        mid_font = ImageFont.load_default()
+        planet_font = font_text
 
     # 🟣 Başlık
     title = f"{name}'s Natal Birth Chart"
-    tw, th = draw.textbbox((0, 0), title, font=title_font)[2:]
-    draw.text(((w - tw) / 2, 25), title, fill=MOR, font=title_font)
+    tw, th = draw.textbbox((0, 0), title, font=font_main)[2:]
+    draw.text(((size - tw) / 2, 60), title, fill=(165, 102, 255), font=font_main)
 
-    # 🔢 12 Ev numaraları
-    center_x, center_y = w / 2, (new_h / 2)
-    inner_radius = min(w, h) * 0.19
+    # Dış daire
+    draw.ellipse(
+        [cx - radius, cy - radius, cx + radius, cy + radius],
+        outline=(180, 160, 255), width=3
+    )
+
+    # 12 ev dilimi + numaraları
     for i in range(12):
-        angle_deg = i * 30 + 15
-        angle_rad = math.radians(angle_deg - 90)
-        tx = center_x + inner_radius * math.cos(angle_rad)
-        ty = center_y + inner_radius * math.sin(angle_rad)
-        num = str(i + 1)
-        draw.text((tx - 7, ty - 10), num, fill=SIYAH, font=small_font)
+        angle = math.radians((360 / 12) * i)
+        x = cx + radius * math.cos(angle)
+        y = cy + radius * math.sin(angle)
+        draw.line([cx, cy, x, y], fill=(100, 100, 180), width=2)
 
-    # 🪐 Gezegen sembolleri
-    planet_symbols = {
-        "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
-        "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇"
-    }
+        # Ev numarası
+        num_angle = math.radians((360 / 12) * i + 15)
+        nx = cx + (radius - 50) * math.cos(num_angle)
+        ny = cy + (radius - 50) * math.sin(num_angle)
+        draw.text((nx - 10, ny - 10), str(i + 1), fill=(220, 220, 250), font=font_small)
 
-    radius = min(w, h) * 0.33
-    for planet in planets:
-        if planet["name"] not in planet_symbols:
-            continue
-        angle_deg = planet["ecliptic_long"]
-        angle_rad = math.radians(angle_deg - 90)
-        px = center_x + radius * math.cos(angle_rad)
-        py = center_y + radius * math.sin(angle_rad)
+    # Gezegen pozisyonları
+    planet_positions = {}
+    inner_radius = radius * 0.85
+    for p in planets:
+        angle = math.radians(p["ecliptic_long"])
+        x = cx + inner_radius * math.cos(angle)
+        y = cy + inner_radius * math.sin(angle)
+        draw.text((x - 12, y - 12), "☉", fill=(165, 102, 255), font=planet_font)
+        planet_positions[p["name"]] = (x, y, p["ecliptic_long"])
 
-        sym = planet_symbols[planet["name"]]
-        # Bold efekti: iki kez çiz
-        draw.text((px - 10, py - 10), sym, fill=(120, 60, 230, 255), font=astro_font)
-        draw.text((px - 11, py - 11), sym, fill=MOR, font=astro_font)
+    # Aspect çizgileri
+    planet_names = list(planet_positions.keys())
+    for i in range(len(planet_names)):
+        for j in range(i + 1, len(planet_names)):
+            p1, p2 = planet_names[i], planet_names[j]
+            angle = angle_diff(planet_positions[p1][2], planet_positions[p2][2])
 
-    # 📘 Footer Bilgisi
-    footer1 = f"Born on {dob} at {tob}"
-    footer2 = f"{city}, {country}"
-    footer3 = "Aspects:"
-    footer4 = "🔴 Opposition   🔵 Trine   🟢 Sextile   ⚪ Conjunction   🟠 Square"
+            for asp, (deg, orb, color) in ASPECTS.items():
+                if abs(angle - deg) <= orb:
+                    draw.line(
+                        [planet_positions[p1][:2], planet_positions[p2][:2]],
+                        fill=color, width=2
+                    )
 
-    y_footer = h + top_pad + 20
-    fw1 = draw.textbbox((0, 0), footer1, font=mid_font)[2]
-    fw2 = draw.textbbox((0, 0), footer2, font=mid_font)[2]
-    fw3 = draw.textbbox((0, 0), footer3, font=small_font)[2]
-    fw4 = draw.textbbox((0, 0), footer4, font=small_font)[2]
+    # Alt bilgi (tarih, saat, yer)
+    info1 = f"Date: {dob} — Time: {tob}"
+    info2 = f"Location: {city}, {country}"
+    iw1 = draw.textbbox((0, 0), info1, font=font_text)[2]
+    iw2 = draw.textbbox((0, 0), info2, font=font_text)[2]
+    y_base = pad_top + size + 30
+    draw.text(((size - iw1) / 2, y_base), info1, fill=(210, 210, 230), font=font_text)
+    draw.text(((size - iw2) / 2, y_base + 40), info2, fill=(210, 210, 230), font=font_text)
 
-    draw.text(((w - fw1) / 2, y_footer), footer1, fill=SIYAH, font=mid_font)
-    draw.text(((w - fw2) / 2, y_footer + 35), footer2, fill=SIYAH, font=mid_font)
-    draw.text(((w - fw3) / 2, y_footer + 80), footer3, fill=GRAY, font=small_font)
-    draw.text(((w - fw4) / 2, y_footer + 115), footer4, fill=GRAY, font=small_font)
+    # Aspect legend
+    legend_y = y_base + 100
+    lx = 300
+    draw.text((lx, legend_y - 40), "Aspects:", fill=(180, 160, 255), font=font_text)
+    for i, (asp, (_, _, color)) in enumerate(ASPECTS.items()):
+        box_y = legend_y + i * 30
+        draw.rectangle([lx, box_y, lx + 25, box_y + 25], fill=color)
+        draw.text((lx + 40, box_y - 2), asp, fill=(220, 220, 240), font=font_small)
 
-    # 💾 Kaydetme
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = f"charts/chart_{name.lower()}_{timestamp}.png"
-    if not os.path.exists("charts"):
-        os.makedirs("charts")
-    canvas.save(output_path, format="PNG")
+    # Kaydet
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("charts", exist_ok=True)
+    file_path = f"charts/chart_{name.lower()}_{timestamp}.png"
+    img.save(file_path)
 
-    return {
-        "status": "ok",
-        "url": f"/{output_path}"
-    }
+    return {"url": f"/{file_path}"}
