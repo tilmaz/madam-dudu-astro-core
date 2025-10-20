@@ -32,6 +32,13 @@ def find_aspects(planets):
                     results.append((p1, p2, name))
     return results
 
+def get_text_size(draw, text, font):
+    """Pillow 10+ uyumlu text ölçümü"""
+    bbox = draw.textbbox((0, 0), text, font=font)
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    return width, height
+
 def draw_chart(planets, name="User", dob="", tob="", city="", country=""):
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -89,16 +96,22 @@ def draw_chart(planets, name="User", dob="", tob="", city="", country=""):
             symbol = PLANET_SYMBOLS.get(name_p, name_p[0])
             draw.text((x - 10, y - 10), symbol, fill=(180, 80, 255), font=font)
 
+        # Başlık
         title_text = f"{name}'s Natal Birth Chart"
-        tw, th = draw.textsize(title_text, font=title_font)
+        tw, th = get_text_size(draw, title_text, title_font)
         draw.text(((W - tw) / 2, 20), title_text, fill=(50, 50, 50), font=title_font)
 
+        # Bilgi metinleri
         info_y = H - 100
         info_text1 = f"Date of Birth: {dob}    Time: {tob}"
         info_text2 = f"Place of Birth: {city}, {country}"
-        draw.text(((W - draw.textlength(info_text1, font=info_font)) / 2, info_y), info_text1, fill=(30, 30, 30), font=info_font)
-        draw.text(((W - draw.textlength(info_text2, font=info_font)) / 2, info_y + 30), info_text2, fill=(30, 30, 30), font=info_font)
 
+        tw1, _ = get_text_size(draw, info_text1, info_font)
+        tw2, _ = get_text_size(draw, info_text2, info_font)
+        draw.text(((W - tw1) / 2, info_y), info_text1, fill=(30, 30, 30), font=info_font)
+        draw.text(((W - tw2) / 2, info_y + 30), info_text2, fill=(30, 30, 30), font=info_font)
+
+        # Aspect açıklamaları
         legend_y = H - 50
         x_offset = 60
         for aspect_name, (color, label) in ASPECTS.items():
