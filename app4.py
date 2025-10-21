@@ -2,23 +2,28 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from chart_utils import draw_chart
 import logging
 import os
-from chart_utils import draw_chart
+from io import BytesIO
 
-# === Charts klasörünü baştan oluştur (Render deploy hatasını önler) ===
-os.makedirs("charts", exist_ok=True)
+# --- LOG AYARLARI ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
-# === FastAPI uygulaması ===
 app = FastAPI()
 
-# === charts klasörünü dışarıya açıyoruz ===
-app.mount("/charts", StaticFiles(directory="charts"), name="charts")
+# --- CHARTS DİZİNİ GÜVENLİ ŞEKİLDE OLUŞTUR ---
+CHART_DIR = "charts"
+os.makedirs(CHART_DIR, exist_ok=True)
 
-# === Logging ayarları ===
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# --- STATİK DOSYALAR ---
+app.mount("/charts", StaticFiles(directory=CHART_DIR), name="charts")
 
-# === Veri modelleri ===
+
+# === MODELLER ===
 class Planet(BaseModel):
     name: str
     ecliptic_long: float
@@ -31,49 +36,54 @@ class ChartRequest(BaseModel):
     country: str
     planets: list[Planet]
 
-class ComputeRequest(BaseModel):
-    name: str
-    dob: str
-    tob: str
-    city: str
-    country: str
 
-# === Endpoint: /compute ===
+# === ENDPOINTLER ===
 @app.post("/compute")
-async def compute_chart(request: ComputeRequest):
-    logging.info(f"🧮 Compute endpoint called with data: {request.dict()}")
-    return {"input": request.dict()}
+async def compute_chart(request: Request):
+    data = await request.json()
+    logging.info(f"🧮 Compute endpoint called with data: {data}")
+    return {"input": data}
 
-# === Endpoint: /render ===
+
 @app.post("/render")
 async def render_chart(request: ChartRequest):
-    try:
-        logging.info(f"🎨 Rendering chart for {request.name} ({request.dob} @ {request.tob}, {request.city}, {request.country})")
-        logging.info("=== 🌌 DRAW_CHART STARTED ===")
+    logging.info(f"🎨 Rendering chart for {request.name} ({request.dob} @ {request.tob}, {request.city}, {request.country})")
+    logging.info("=== 🌌 DRAW_CHART STARTED ===")
 
-        output_path = draw_chart(
+    try:
+        # --- CHART ÇİZİMİ ---
+        buffer = draw_chart(
+            planets=[p.dict() for p in request.planets],
             name=request.name,
             dob=request.dob,
             tob=request.tob,
             city=request.city,
             country=request.country,
-            planets=[p.dict() for p in request.planets]
         )
 
-        chart_url = f"https://madam-dudu-astro-core-1.onrender.com/{output_path}"
-        logging.info(f"✅ Chart başarıyla kaydedildi: {output_path}")
+        if not isinstance(buffer, BytesIO):
+            logging.error("❌ draw_chart() BytesIO döndürmedi!")
+            return JSONResponse(status_code=500, content={"error": "Invalid chart output type."})
+
+        # --- PNG OLARAK KAYDET ---
+        file_path = os.path.join(CHART_DIR, f"chart_{request.name.lower()}_final.png")
+        with open(file_path, "wb") as f:
+            f.write(buffer.getbuffer())
+
+        logging.info(f"✅ Chart başarıyla kaydedildi: {file_path}")
         logging.info("=== ✅ DRAW_CHART TAMAMLANDI ===")
 
+        # --- BAŞARILI YANIT ---
         return {
             "text": f"{request.name}'s chart generated successfully.",
-            "chart_url": chart_url
+            "chart_url": f"https://madam-dudu-astro-core-1.onrender.com/{file_path}"
         }
 
     except Exception as e:
-        logging.error(f"❌ Error generating chart: {e}", exc_info=True)
+        logging.exception("❌ Error generating chart")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# === Health Check ===
+
 @app.get("/")
-async def root():
-    return {"status": "OK", "message": "Madam Dudu Astro Core is running 🚀"}
+def home():
+    return {"status": "ok", "message": "Madam Dudu Astro Core is running 🎨"}
