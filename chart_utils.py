@@ -19,9 +19,9 @@ def draw_chart(name, dob, tob, city, country, planets):
 
     draw = ImageDraw.Draw(template)
 
-    # Font paths (Render-safe)
-    astro_font_path = os.path.join(os.path.dirname(__file__), "AstroGadget.ttf")
-    text_font_path = os.path.join(os.path.dirname(__file__), "arial.ttf")
+    # Font paths (Render-safe absolute)
+    astro_font_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "AstroGadget.ttf"))
+    text_font_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "arial.ttf"))
 
     try:
         astro_font = ImageFont.truetype(astro_font_path, 38)
@@ -45,9 +45,9 @@ def draw_chart(name, dob, tob, city, country, planets):
     month_name = months[int(month) - 1]
     footer_text = f"{int(day)} {month_name} {year} @ {tob} / {city}, {country}"
 
-    # Footer (purple text, positioned for A4 layout)
+    # Footer (purple text)
     draw.text(
-        (width / 2, height - 80),
+        (width / 2, height - 60),
         footer_text,
         font=text_font,
         fill=(180, 140, 255),
@@ -55,7 +55,7 @@ def draw_chart(name, dob, tob, city, country, planets):
     )
     logging.info("✅ Alt bilgi çizildi.")
 
-    # Planet symbols (with AstroGadget font)
+    # Planet symbols
     planet_symbols = {
         "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
         "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇"
@@ -69,13 +69,12 @@ def draw_chart(name, dob, tob, city, country, planets):
         lon = math.radians(p["ecliptic_long"])
         x = cx + radius * math.cos(lon)
         y = cy + radius * math.sin(lon)
-
         symbol = planet_symbols.get(name_p, "?")
         draw.text((x, y), symbol, font=astro_font, fill=(180, 140, 255), anchor="mm")
 
     logging.info("✅ %d gezegen sembolü çizildi.", len(planets))
 
-    # Aspect colors
+    # Aspect colors and labels
     aspect_colors = {
         "conjunction": ((180, 180, 180, 255), "Conjunction"),
         "trine": ((0, 150, 255, 255), "Trine"),
@@ -99,6 +98,7 @@ def draw_chart(name, dob, tob, city, country, planets):
         else:
             return None
 
+    # Aspect lines
     for i, p1 in enumerate(planets):
         for j, p2 in enumerate(planets):
             if i >= j:
@@ -117,20 +117,21 @@ def draw_chart(name, dob, tob, city, country, planets):
     logging.info("✅ Aspect çizgileri oluşturuldu.")
 
     # Legend (alt kısımda, açıklamalı)
-    legend_y = height - 40
-    start_x = 150
-    spacing = 250
-    for idx, (name_a, (color, label)) in enumerate(aspect_colors.items()):
+    legend_y = height - 120
+    start_x = 120
+    spacing = 230
+    for idx, (aspect_name, (color, label)) in enumerate(aspect_colors.items()):
         x = start_x + idx * spacing
-        draw.rectangle((x, legend_y - 15, x + 30, legend_y + 15), fill=color)
-        draw.text((x + 50, legend_y), label, font=text_font, fill=(255, 255, 255), anchor="lm")
+        draw.rectangle((x, legend_y - 10, x + 25, legend_y + 10), fill=color)
+        draw.text((x + 40, legend_y - 5), label, font=text_font, fill=(255, 255, 255), anchor="lt")
 
-    logging.info("✅ Legend çizildi.")
+    logging.info("✅ Legend açıklamaları çizildi.")
 
-    # Save
+    # Save chart
     os.makedirs("charts", exist_ok=True)
     filename = f"charts/chart_{name.lower()}_final.png"
     template.save(filename)
     logging.info("✅ Chart başarıyla kaydedildi: %s", filename)
     logging.info("=== ✅ DRAW_CHART TAMAMLANDI ===")
+
     return filename
