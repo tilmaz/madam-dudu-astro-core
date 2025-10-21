@@ -1,30 +1,27 @@
 # chart_utils.py
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
-import logging
 import os
-from datetime import datetime
+import math
+import logging
 
-# --- LOG AYARLARI (isteğe bağlı) ---
+# --- LOG ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# --- KANVAS AYARLARI ---
+# --- KANVAS SABİTLERİ ---
 CANVAS_W = 1800
 CANVAS_H = 1800
-MARGIN = 80
+MARGIN   = 80
 
-# --- FONT YÜKLEME (fallback güvenli) ---
-# Linux tabanlı Render ortamında genelde DejaVuSans bulunur. Bulunamazsa Pillow'un default'una düşer.
-def _load_font(preferred_path: str | None, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _load_font(preferred_path: str | None, size: int):
+    """Güvenli font yükleyici (fallback: DejaVuSans -> Pillow default)."""
     try:
         if preferred_path and os.path.exists(preferred_path):
             return ImageFont.truetype(preferred_path, size)
-        # Yaygın yedek
         return ImageFont.truetype("DejaVuSans.ttf", size)
     except Exception:
         return ImageFont.load_default()
 
-# Proje genelinde çağrılacak ana fonksiyon
 def draw_chart(
     planets: list[dict],
     name: str,
@@ -34,81 +31,66 @@ def draw_chart(
     country: str,
 ) -> BytesIO:
     """
-    Basit bir placeholder chart çizimi. Harita algoritmanız hazır olana kadar
-    en azından servis sorunsuz çalışsın diye temel görsel üretir.
-
-    Dönen değer: PNG verisi içeren BytesIO
+    Basit placeholder harita. Çıkış: PNG içeren BytesIO.
     """
     # --- ARKA PLAN ---
-    bg = Image.new("RGB", (CANVAS_W, CANVAS_H), (14, 16, 20))  # koyu gri/mavi
+    bg = Image.new("RGB", (CANVAS_W, CANVAS_H), (14, 16, 20))
     draw = ImageDraw.Draw(bg)
 
     # --- FONTLAR ---
-    # İsterseniz özel font yolunu env ile verin: FONT_PATH=/opt/render/project/src/assets/MyFont.ttf
-    font_path = os.getenv("FONT_PATH")
+    font_path  = os.getenv("FONT_PATH")
     title_font = _load_font(font_path, 72)
-    meta_font = _load_font(font_path, 40)
+    meta_font  = _load_font(font_path, 40)
     small_font = _load_font(font_path, 32)
 
     # --- BAŞLIK & METADATA ---
-    title = f"ASTRO CHART — {name}"
-    draw.text((MARGIN, MARGIN), title, fill=(230, 235, 240), font=title_font)
-
-    # Tarih/saat/konum satırı
-    meta_y = MARGIN + 110
+    draw.text((MARGIN, MARGIN), f"ASTRO CHART — {name}", fill=(230,235,240), font=title_font)
     meta = f"Date/Time (local): {dob} @ {tob} | Location: {city}, {country}"
-    draw.text((MARGIN, meta_y), meta, fill=(200, 205, 210), font=meta_font)
+    draw.text((MARGIN, MARGIN + 110), meta, fill=(200,205,210), font=meta_font)
 
-    # Basit sınır çerçevesi
-    draw.rectangle(
-        [MARGIN, MARGIN, CANVAS_W - MARGIN, CANVAS_H - MARGIN],
-        outline=(70, 75, 85),
-        width=3,
-    )
-
-    # --- GÖSTERİMLİ YER TUTUCU DAİRE (çember) ---
-    # Asıl harita çiziminiz burada dönecek; şu an placeholder.
+    # --- DIŞ ÇERÇEVE + ANA ÇEMBER ---
+    draw.rectangle([MARGIN, MARGIN, CANVAS_W - MARGIN, CANVAS_H - MARGIN], outline=(70,75,85), width=3)
     cx, cy = CANVAS_W // 2, CANVAS_H // 2
     R = min(CANVAS_W, CANVAS_H) // 2 - 2 * MARGIN
-    draw.ellipse([cx - R, cy - R, cx + R, cy + R], outline=(120, 125, 135), width=4)
+    draw.ellipse([cx - R, cy - R, cx + R, cy + R], outline=(120,125,135), width=4)
 
-    # Gezegen isimlerini kabaca yerleştir (placeholder)
-    # planets: [{'name': 'Sun', 'ecliptic_long': 123.45}, ...]
+    # --- GEZEGEN ETİKETLERİ (placeholder: ecliptic_long varsa onu kullan) ---
     ring_r = int(R * 0.85)
-    if planets:
-        for i, p in enumerate(planets):
-            # Basit bir dağılım (gerçek ecliptik uzunluklarına göre yerleştirmeyi sonra uygularsınız)
-            angle_deg = (i / max(1, len(planets))) * 360.0
-            # Eğer gerçek açı varsa onu kullan
-            angle_deg = p.get("ecliptic_long", angle_deg)
-            angle_rad = angle_deg * 3.1415926535 / 180.0
-            x = cx + ring_r * 0.95 * (float(__import__("math").cos(angle_rad)))
-            y = cy + ring_r * 0.95 * (float(__import__("math").sin(angle_rad)))
-            label = p.get("name", f"P{i+1}")
-            draw.ellipse([x - 6, y - 6, x + 6, y + 6], fill=(220, 220, 220))
-            draw.text((x + 10, y - 10), label, fill=(220, 220, 220), font=small_font)
+    planets = planets or []
+    for i, p in enumerate(planets):
+        angle_deg = p.get("ecliptic_long", (i / max(1, len(planets))) * 360.0)
+        rad = math.radians(angle_deg)
+        x = cx + ring_r * 0.95 * math.cos(rad)
+        y = cy + ring_r * 0.95 * math.sin(rad)
+        draw.ellipse([x - 6, y - 6, x + 6, y + 6], fill=(220,220,220))
+        draw.text((x + 10, y - 10), p.get("name", f"P{i+1}"), fill=(220,220,220), font=small_font)
 
-    # --- LEGEND (ASPECT AÇIKLAMALARI — EN ALTA ve %50 KÜÇÜK) ---
+    # --- LEGEND (en altta, %50 küçük) ---
     legend = [
         ("Conjunction", "#FFD400"),
-        ("Sextile", "#1DB954"),
-        ("Square", "#E63946"),
-        ("Trine", "#1E88E5"),
-        ("Opposition", "#7B1FA2"),
+        ("Sextile",     "#1DB954"),
+        ("Square",      "#E63946"),
+        ("Trine",       "#1E88E5"),
+        ("Opposition",  "#7B1FA2"),
     ]
+    # %50 küçült
+    legend_font_size = max(12, int(getattr(small_font, "size", 32) * 0.5))
+    legend_font = _load_font(font_path, legend_font_size)
 
-    # Yazı boyutunu %50 küçült
-    try:
-        legend_font_size = max(12, int((small_font.size if hasattr(small_font, "size") else 32) * 0.5))
-        legend_font = _load_font(font_path, legend_font_size)
-    except Exception:
-        legend_font = ImageFont.load_default()
-
-    # Sayfanın en alt şeridine hizala
     yL = CANVAS_H - 50
     xL = MARGIN
     spacing = 180
-
     for i, (label, col) in enumerate(legend):
         lx = xL + i * spacing
-        # Küçük renk kutu
+        # renk kutusu
+        draw.rectangle([lx, yL + 8, lx + 18, yL + 18], fill=col)
+        # etiket
+        draw.text((lx + 26, yL + 2), label, fill=col, font=legend_font)
+
+    logging.info("✅ Legend en altta ve %50 küçük olarak çizildi.")
+
+    # --- PNG/BytesIO ÇIKIŞ ---
+    buf = BytesIO()
+    bg.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
