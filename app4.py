@@ -1,3 +1,4 @@
+# app4.py
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,7 +49,7 @@ async def compute_chart(request: Request):
 @app.post("/render")
 async def render_chart(request: ChartRequest):
     logging.info(f"🎨 Rendering chart for {request.name} ({request.dob} @ {request.tob}, {request.city}, {request.country})")
-    logging.info("=== 🌌 DRAW_CHART STARTEDD ===")
+    logging.info("=== 🌌 DRAW_CHART STARTED ===")
 
     try:
         # --- CHART ÇİZİMİ ---
@@ -66,17 +67,19 @@ async def render_chart(request: ChartRequest):
             return JSONResponse(status_code=500, content={"error": "Invalid chart output type."})
 
         # --- PNG OLARAK KAYDET ---
-        file_path = os.path.join(CHART_DIR, f"chart_{request.name.lower()}_final.png")
+        safe_name = "".join(c for c in request.name.lower() if c.isalnum() or c in ("-", "_"))
+        file_path = os.path.join(CHART_DIR, f"chart_{safe_name}_final.png")
         with open(file_path, "wb") as f:
             f.write(buffer.getbuffer())
 
         logging.info(f"✅ Chart başarıyla kaydedildi: {file_path}")
         logging.info("=== ✅ DRAW_CHART TAMAMLANDI ===")
 
-        # --- BAŞARILI YANIT ---
+        # Render’da kendi domain’inizi kullanın
+        base_url = os.getenv("BASE_URL", "https://madam-dudu-astro-core-1.onrender.com")
         return {
             "text": f"{request.name}'s chart generated successfully.",
-            "chart_url": f"https://madam-dudu-astro-core-1.onrender.com/{file_path}"
+            "chart_url": f"{base_url}/{file_path}"
         }
 
     except Exception as e:
