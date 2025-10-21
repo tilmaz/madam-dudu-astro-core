@@ -1,7 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 from datetime import datetime
-import math, os, logging
+import math, os, logging, re
 
 # Renkler ve sabitler
 PURPLE = "#800080"
@@ -18,7 +18,8 @@ PLANET_SYMBOLS = {
     "Jupiter": "f", "Saturn": "g", "Uranus": "h", "Neptune": "i", "Pluto": "j"
 }
 
-def _r(x, n=3): return round(float(x), n)
+def _r(x, n=3): 
+    return round(float(x), n)
 
 def _angle_to_xy(deg, radius, cx, cy):
     a = math.radians(90 - (deg % 360))
@@ -29,10 +30,15 @@ def _angle_to_xy(deg, radius, cx, cy):
 def _clamp(pt, cx, cy, radius):
     vx, vy = pt[0] - cx, pt[1] - cy
     d = math.hypot(vx, vy)
-    if d == 0: return (cx, cy)
+    if d == 0:
+        return (cx, cy)
     k = radius / d
     return (_r(cx + vx * k), _r(cy + vy * k))
 
+def _sanitize_filename(s):
+    s = (s or "chart").lower().strip()
+    s = re.sub(r"[^a-z0-9._-]+", "_", s)
+    return s or "chart"
 
 def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     """
@@ -52,7 +58,7 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     # --- FONTLAR ---
     try:
         planet_font = ImageFont.truetype(font_planet, 64)
-        logging.info("✅ Astro font başarıyla yüklendi (LAYOUT_BASIC aktif).")
+        logging.info("✅ Astro font yüklendi.")
     except Exception as e:
         logging.warning(f"⚠️ Astro font yüklenemedi ({e}), varsayılan font kullanılıyor.")
         planet_font = ImageFont.load_default()
@@ -64,6 +70,14 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     except Exception as e:
         logging.warning(f"⚠️ Yazı fontu yüklenemedi ({e}), varsayılan font kullanılacak.")
         label_font = small_font = ImageFont.load_default()
+
+    # bbox yardımcı
+    def _text_size(txt, font):
+        try:
+            b = draw.textbbox((0, 0), txt, font=font)
+            return (b[2] - b[0], b[3] - b[1])
+        except Exception:
+            return draw.textsize(txt, font=font)
 
     # --- GEOMETRİ ---
     cx, cy = bg.width // 2, bg.height // 2
@@ -77,8 +91,8 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
         x, y = _angle_to_xy(deg, R_planet, cx, cy)
         pos[p["name"]] = (x, y)
         sym = PLANET_SYMBOLS.get(p["name"], "?")
-        bx, by, bx2, by2 = draw.textbbox((0, 0), sym, font=planet_font)
-        draw.text((_r(x - (bx2 - bx) / 2), _r(y - (by2 - by) / 2)), sym, fill=PURPLE, font=planet_font)
+        bw, bh = _text_size(sym, planet_font)
+        draw.text((_r(x - bw / 2), _r(y - bh / 2)), sym, fill=PURPLE, font=planet_font)
     logging.info("✅ Gezegen sembolleri çizildi (%d adet).", len(planets))
 
     # --- ASPECT ÇİZGİLERİ ---
@@ -87,7 +101,8 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
         for j in range(i + 1, len(planets)):
             p2 = planets[j]
             d = abs(float(p1["ecliptic_long"]) - float(p2["ecliptic_long"])) % 360
-            if d > 180: d = 360 - d
+            if d > 180:
+                d = 360 - d
             for A, (col, th) in ASPECTS.items():
                 if abs(d - A) < ORB:
                     a = _clamp(pos[p1["name"]], cx, cy, R_aspect)
@@ -98,8 +113,8 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
 
     # --- BAŞLIK ---
     title = f"{name}'s Natal Birth Chart" if name else "Natal Birth Chart"
-    tb = draw.textbbox((0, 0), title, font=label_font)
-    draw.text(((bg.width - (tb[2] - tb[0])) // 2, 35), title, fill=PURPLE, font=label_font)
+    tw, th = _text_size(title, label_font)
+    draw.text(((bg.width - tw) // 2, 35), title, fill=PURPLE, font=label_font)
     logging.info("✅ Başlık çizildi.")
 
     # --- ALT BİLGİ ---
@@ -114,14 +129,14 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     loc_txt = f"{city}, {country}" if (city and country) else (city or country or "")
 
     y0 = bg.height - 100
-    db = draw.textbbox((0, 0), date_txt, font=small_font)
-    lb = draw.textbbox((0, 0), loc_txt, font=small_font)
-    draw.text(((bg.width - (db[2] - db[0])) // 2, y0 - 20), date_txt, fill=PURPLE, font=small_font)
-    draw.text(((bg.width - (lb[2] - lb[0])) // 2, y0 + 20), loc_txt, fill=PURPLE, font=small_font)
+    dw, dh = _text_size(date_txt, small_font)
+    lw, lh = _text_size(loc_txt, small_font)
+    draw.text(((bg.width - dw) // 2, y0 - 20), date_txt, fill=PURPLE, font=small_font)
+    draw.text(((bg.width - lw) // 2, y0 + 20), loc_txt, fill=PURPLE, font=small_font)
     logging.info("✅ Alt bilgi çizildi.")
 
-    # --- LEGEND ---
-legend = [
+    # --- LEGEND (ASPECT AÇIKLAMALARI, EN ALTA ve %50 KÜÇÜK) ---
+    legend = [
         ("Conjunction", "#FFD400"),
         ("Sextile", "#1DB954"),
         ("Square", "#E63946"),
@@ -131,33 +146,18 @@ legend = [
 
     # Yazı boyutunu %50 küçült
     try:
-        legend_font_size = max(12, int(small_font.size * 0.5))
+        base_size = getattr(small_font, "size", 24)
+        legend_font_size = max(12, int(base_size * 0.5))
         legend_font = ImageFont.truetype(font_text, legend_font_size)
     except Exception:
         legend_font = ImageFont.load_default()
 
-    # Sayfanın en altına hizala
+    # En alta hizala
     yL = bg.height - 50
     xL = 50
-    spacing = 180
-
-    for i, (label, col) in enumerate(legend):
-        lx = xL + i * spacing
-        # Küçük renk kutusu
-        draw.rectangle([lx, yL + 8, lx + 18, yL + 18], fill=col)
-        # Etiket yazısı
-        draw.text((lx + 26, yL + 2), label, fill=col, font=legend_font)
-
-    logging.info("✅ Legend açıklamaları alt hizalı ve küçültülmüş olarak çizildi.")
-
-    # --- DOSYA ÇIKTI ---
-    os.makedirs("charts", exist_ok=True)
-    out_path = f"charts/chart_{name.lower()}_final.png" if name else "charts/chart_final.png"
-    bg.save(out_path, format="PNG", optimize=True)
-    logging.info(f"✅ Chart kaydedildi: {out_path}")
-    logging.info("=== ✅ DRAW_CHART TAMAMLANDI ===")
-
-    out = BytesIO()
-    bg.save(out, format="PNG", optimize=True)
-    out.seek(0)
-    return out
+    # Spacing, label genişliklerine göre makul aralık
+    # (küçük swatch 18px + padding 10px + metin + aralık 40px)
+    # en geniş label ölçülür
+    max_label_w = max(_text_size(lbl, legend_font)[0] for (lbl, _) in legend)
+    spacing = 18 + 10 + max_label_w + 40
+    spacing = max(140, spacing)  # minimum 140
