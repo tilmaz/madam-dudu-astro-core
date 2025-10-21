@@ -6,6 +6,8 @@ import logging
 import os
 
 app = FastAPI()
+from fastapi.staticfiles import StaticFiles
+app.mount("/charts", StaticFiles(directory="charts"), name="charts")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 # === MODELS ===
