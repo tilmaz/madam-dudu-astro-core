@@ -1,127 +1,150 @@
-import os
-import math
-import logging
 from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
+from datetime import datetime
+import math, os, logging
 
-# Log formatı
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# Renkler ve sabitler
+PURPLE = "#800080"
+ASPECTS = {
+    0:   ("#FFD400", 8),   # Conjunction
+    60:  ("#1DB954", 8),   # Sextile
+    90:  ("#E63946", 8),   # Square
+    120: ("#1E88E5", 8),   # Trine
+    180: ("#7B1FA2", 8),   # Opposition
+}
 
-def draw_chart(name, dob, tob, city, country, planets):
-    logging.info(f"🎨 Rendering chart for {name} ({dob} @ {tob}, {city}, {country})")
-    logging.info("=== 🌌 DRAW_CHART STARTED ===")
+PLANET_SYMBOLS = {
+    "Sun": "a", "Moon": "b", "Mercury": "c", "Venus": "d", "Mars": "e",
+    "Jupiter": "f", "Saturn": "g", "Uranus": "h", "Neptune": "i", "Pluto": "j"
+}
 
-    # --- TEMPLATE YÜKLE ---
-    template_path = os.path.join(os.path.dirname(__file__), "chart_template.png")
-    template = Image.open(template_path).convert("RGBA")
-    width, height = template.size
-    draw = ImageDraw.Draw(template)
-    logging.info("✅ Template başarıyla yüklendi. 🖼️ Boyut: %dx%d", width, height)
+def _r(x, n=3): return round(float(x), n)
+
+def _angle_to_xy(deg, radius, cx, cy):
+    a = math.radians(90 - (deg % 360))
+    x = cx + radius * math.cos(a)
+    y = cy - radius * math.sin(a)
+    return (_r(x), _r(y))
+
+def _clamp(pt, cx, cy, radius):
+    vx, vy = pt[0] - cx, pt[1] - cy
+    d = math.hypot(vx, vy)
+    if d == 0: return (cx, cy)
+    k = radius / d
+    return (_r(cx + vx * k), _r(cy + vy * k))
+
+
+def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
+    """
+    planets: [{"name":"Sun","ecliptic_long":311.533}, ...]
+    returns: BytesIO (PNG)
+    """
+    logging.info("🎨 Chart çizimi başlatıldı...")
+    # --- DOSYA YOLLARI ---
+    template_path = "chart_template.png"
+    font_planet = "AstroGadget.ttf"
+    font_text = "arial.ttf"
+
+    # --- ARKA PLAN ---
+    bg = Image.open(template_path).convert("RGBA")
+    draw = ImageDraw.Draw(bg)
 
     # --- FONTLAR ---
-    astro_font_path = os.path.join(os.path.dirname(__file__), "AstroGadget.ttf")
-    text_font_path = os.path.join(os.path.dirname(__file__), "arial.ttf")
+    try:
+        planet_font = ImageFont.truetype(font_planet, 64, layout_engine=ImageFont.LAYOUT_BASIC)
+        logging.info("✅ Astro font başarıyla yüklendi (LAYOUT_BASIC aktif).")
+    except Exception as e:
+        logging.warning(f"⚠️ Astro font yüklenemedi ({e}), varsayılan font kullanılıyor.")
+        planet_font = ImageFont.load_default()
 
     try:
-        # AstroGadget özel sembol fontu — Render’da kutu çıkmasını engeller
-        astro_font = ImageFont.truetype(astro_font_path, 42, layout_engine=ImageFont.LAYOUT_BASIC)
-        text_font = ImageFont.truetype(text_font_path, 26)
-        logging.info("✅ Fontlar başarıyla yüklendi (LAYOUT_BASIC ile).")
+        label_font = ImageFont.truetype(font_text, 48)
+        small_font = ImageFont.truetype(font_text, 36)
+        logging.info("✅ Yazı fontları yüklendi.")
     except Exception as e:
-        logging.error(f"❌ Font yüklenemedi ({e}) — varsayılan fontlar devreye alındı.")
-        astro_font = ImageFont.load_default()
-        text_font = ImageFont.load_default()
+        logging.warning(f"⚠️ Yazı fontu yüklenemedi ({e}), varsayılan font kullanılacak.")
+        label_font = small_font = ImageFont.load_default()
 
-    # --- BAŞLIK ---
-    title_text = f"{name}'s Natal Birth Chart"
-    draw.text((width / 2, 60), title_text, font=text_font, fill=(180, 140, 255), anchor="mm")
-    logging.info("✅ Başlık çizildi.")
+    # --- GEOMETRİ ---
+    cx, cy = bg.width // 2, bg.height // 2
+    R_planet = int((min(cx, cy) - 50) * 0.85)
+    R_aspect = int(R_planet * 0.80)
 
-    # --- ALT TARİH BİLGİSİ ---
-    months = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    ]
-    year, month, day = dob.split("-")
-    month_name = months[int(month) - 1]
-    footer_text = f"{int(day)} {month_name} {year} @ {tob} / {city}, {country}"
-
-    draw.text(
-        (width / 2, height - 65),
-        footer_text,
-        font=text_font,
-        fill=(180, 140, 255),
-        anchor="mm",
-    )
-    logging.info("✅ Alt bilgi çizildi.")
-
-    # --- GEZEGEN SEMBOLLERİ ---
-    planet_symbols = {
-        "Sun": "☉", "Moon": "☽", "Mercury": "☿", "Venus": "♀", "Mars": "♂",
-        "Jupiter": "♃", "Saturn": "♄", "Uranus": "♅", "Neptune": "♆", "Pluto": "♇"
-    }
-
-    cx, cy = width // 2, height // 2 - 40
-    radius = 420
-
+    # --- GEZEGENLER ---
+    pos = {}
     for p in planets:
-        lon = math.radians(p["ecliptic_long"])
-        x = cx + radius * math.cos(lon)
-        y = cy + radius * math.sin(lon)
-        symbol = planet_symbols.get(p["name"], "?")
-        draw.text((x, y), symbol, font=astro_font, fill=(180, 140, 255), anchor="mm")
-    logging.info("✅ %d gezegen sembolü çizildi.", len(planets))
+        deg = float(p["ecliptic_long"]) % 360
+        x, y = _angle_to_xy(deg, R_planet, cx, cy)
+        pos[p["name"]] = (x, y)
+        sym = PLANET_SYMBOLS.get(p["name"], "?")
+        bx, by, bx2, by2 = draw.textbbox((0, 0), sym, font=planet_font)
+        draw.text((_r(x - (bx2 - bx) / 2), _r(y - (by2 - by) / 2)), sym, fill=PURPLE, font=planet_font)
+    logging.info("✅ Gezegen sembolleri çizildi (%d adet).", len(planets))
 
     # --- ASPECT ÇİZGİLERİ ---
-    aspect_colors = {
-        "conjunction": ((180, 180, 180, 255), "Conjunction"),
-        "sextile": ((60, 255, 120, 255), "Sextile"),
-        "square": ((255, 60, 60, 255), "Square"),
-        "trine": ((0, 150, 255, 255), "Trine"),
-        "opposition": ((180, 100, 255, 255), "Opposition"),
-    }
-
-    def get_aspect_color(angle_diff):
-        angle = min(abs(angle_diff), 360 - abs(angle_diff))
-        if abs(angle - 0) < 8: return aspect_colors["conjunction"][0]
-        if abs(angle - 60) < 8: return aspect_colors["sextile"][0]
-        if abs(angle - 90) < 8: return aspect_colors["square"][0]
-        if abs(angle - 120) < 8: return aspect_colors["trine"][0]
-        if abs(angle - 180) < 8: return aspect_colors["opposition"][0]
-        return None
-
+    ORB = 4.0
     for i, p1 in enumerate(planets):
-        for j, p2 in enumerate(planets):
-            if i >= j:
-                continue
-            diff = (p1["ecliptic_long"] - p2["ecliptic_long"]) % 360
-            color = get_aspect_color(diff)
-            if color:
-                lon1 = math.radians(p1["ecliptic_long"])
-                lon2 = math.radians(p2["ecliptic_long"])
-                x1 = cx + radius * 0.8 * math.cos(lon1)
-                y1 = cy + radius * 0.8 * math.sin(lon1)
-                x2 = cx + radius * 0.8 * math.cos(lon2)
-                y2 = cy + radius * 0.8 * math.sin(lon2)
-                draw.line((x1, y1, x2, y2), fill=color, width=2)
+        for j in range(i + 1, len(planets)):
+            p2 = planets[j]
+            d = abs(float(p1["ecliptic_long"]) - float(p2["ecliptic_long"])) % 360
+            if d > 180: d = 360 - d
+            for A, (col, th) in ASPECTS.items():
+                if abs(d - A) < ORB:
+                    a = _clamp(pos[p1["name"]], cx, cy, R_aspect)
+                    b = _clamp(pos[p2["name"]], cx, cy, R_aspect)
+                    draw.line([a, b], fill=col, width=th)
+                    break
     logging.info("✅ Aspect çizgileri oluşturuldu.")
 
-    # --- LEGEND (RENGİN ALTINDA AÇIKLAMALAR) ---
-    legend_y = height - 35
-    start_x = 100
-    spacing = 220
+    # --- BAŞLIK ---
+    title = f"{name}'s Natal Birth Chart" if name else "Natal Birth Chart"
+    tb = draw.textbbox((0, 0), title, font=label_font)
+    draw.text(((bg.width - (tb[2] - tb[0])) // 2, 35), title, fill=PURPLE, font=label_font)
+    logging.info("✅ Başlık çizildi.")
 
-    for idx, (aspect_name, (color, label)) in enumerate(aspect_colors.items()):
-        x = start_x + idx * spacing
-        draw.rectangle((x, legend_y - 12, x + 25, legend_y + 12), fill=color)
-        draw.text((x + 40, legend_y), label, font=text_font, fill=(255, 255, 255), anchor="lm")
+    # --- ALT BİLGİ ---
+    date_txt = ""
+    if dob:
+        try:
+            date_txt = datetime.strptime(dob, "%Y-%m-%d").strftime("%d %B %Y")
+        except Exception:
+            date_txt = dob
+    if tob:
+        date_txt = (date_txt + f" @ {tob}").strip()
+    loc_txt = f"{city}, {country}" if (city and country) else (city or country or "")
 
-    logging.info("✅ Aspect açıklamaları alt hizalı olarak çizildi.")
+    y0 = bg.height - 100
+    db = draw.textbbox((0, 0), date_txt, font=small_font)
+    lb = draw.textbbox((0, 0), loc_txt, font=small_font)
+    draw.text(((bg.width - (db[2] - db[0])) // 2, y0 - 20), date_txt, fill=PURPLE, font=small_font)
+    draw.text(((bg.width - (lb[2] - lb[0])) // 2, y0 + 20), loc_txt, fill=PURPLE, font=small_font)
+    logging.info("✅ Alt bilgi çizildi.")
 
-    # --- KAYDETME ---
+    # --- LEGEND ---
+    legend = [
+        ("Conjunction", "#FFD400"),
+        ("Sextile", "#1DB954"),
+        ("Square", "#E63946"),
+        ("Trine", "#1E88E5"),
+        ("Opposition", "#7B1FA2"),
+    ]
+    yL = bg.height - 180
+    xL = 60
+    spacing = 200
+    for i, (label, col) in enumerate(legend):
+        lx = xL + i * spacing
+        draw.rectangle([lx, yL, lx + 24, yL + 24], fill=col)
+        draw.text((lx + 34, yL + 4), label, fill=col, font=small_font)
+    logging.info("✅ Legend açıklamaları çizildi.")
+
+    # --- DOSYA ÇIKTI ---
     os.makedirs("charts", exist_ok=True)
-    filename = f"charts/chart_{name.lower()}_final.png"
-    template.save(filename)
-    logging.info(f"✅ Chart başarıyla kaydedildi: {filename}")
+    out_path = f"charts/chart_{name.lower()}_final.png" if name else "charts/chart_final.png"
+    bg.save(out_path, format="PNG", optimize=True)
+    logging.info(f"✅ Chart kaydedildi: {out_path}")
     logging.info("=== ✅ DRAW_CHART TAMAMLANDI ===")
 
-    return filename
+    out = BytesIO()
+    bg.save(out, format="PNG", optimize=True)
+    out.seek(0)
+    return out
