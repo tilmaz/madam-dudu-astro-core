@@ -51,7 +51,7 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
 
     # --- FONTLAR ---
     try:
-        planet_font = ImageFont.truetype(font_planet, 64, layout_engine=ImageFont.LAYOUT_BASIC)
+        planet_font = ImageFont.truetype(font_planet, 64)
         logging.info("✅ Astro font başarıyla yüklendi (LAYOUT_BASIC aktif).")
     except Exception as e:
         logging.warning(f"⚠️ Astro font yüklenemedi ({e}), varsayılan font kullanılıyor.")
