@@ -1,17 +1,25 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from chart_utils import draw_chart
 import logging
 import os
+from chart_utils import draw_chart
 
+# === Charts klasörünü baştan oluştur (Render deploy hatasını önler) ===
+os.makedirs("charts", exist_ok=True)
+
+# === FastAPI uygulaması ===
 app = FastAPI()
-from fastapi.staticfiles import StaticFiles
+
+# === charts klasörünü dışarıya açıyoruz ===
 app.mount("/charts", StaticFiles(directory="charts"), name="charts")
+
+# === Logging ayarları ===
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# === MODELS ===
-class PlanetData(BaseModel):
+# === Veri modelleri ===
+class Planet(BaseModel):
     name: str
     ecliptic_long: float
 
@@ -21,19 +29,28 @@ class ChartRequest(BaseModel):
     tob: str
     city: str
     country: str
-    planets: list[PlanetData]
+    planets: list[Planet]
 
-# === ROUTES ===
-@app.get("/")
-async def root():
-    return {"message": "Madam Dudu Natal Chart API v4 — active and ready 🌙"}
+class ComputeRequest(BaseModel):
+    name: str
+    dob: str
+    tob: str
+    city: str
+    country: str
 
+# === Endpoint: /compute ===
+@app.post("/compute")
+async def compute_chart(request: ComputeRequest):
+    logging.info(f"🧮 Compute endpoint called with data: {request.dict()}")
+    return {"input": request.dict()}
+
+# === Endpoint: /render ===
 @app.post("/render")
 async def render_chart(request: ChartRequest):
     try:
         logging.info(f"🎨 Rendering chart for {request.name} ({request.dob} @ {request.tob}, {request.city}, {request.country})")
+        logging.info("=== 🌌 DRAW_CHART STARTED ===")
 
-        # Görsel dosyasını oluştur
         output_path = draw_chart(
             name=request.name,
             dob=request.dob,
@@ -43,24 +60,20 @@ async def render_chart(request: ChartRequest):
             planets=[p.dict() for p in request.planets]
         )
 
-        # 🔁 Tam URL'yi oluştur (Render URL’si dahil)
-        full_url = f"https://madam-dudu-astro-core-1.onrender.com/{output_path}"
+        chart_url = f"https://madam-dudu-astro-core-1.onrender.com/{output_path}"
+        logging.info(f"✅ Chart başarıyla kaydedildi: {output_path}")
+        logging.info("=== ✅ DRAW_CHART TAMAMLANDI ===")
 
-        logging.info(f"✅ Chart successfully generated and saved at: {full_url}")
-
-        # ✅ Artık JSON formatında döndür (PowerShell için uygun)
         return {
             "text": f"{request.name}'s chart generated successfully.",
-            "chart_url": full_url
+            "chart_url": chart_url
         }
 
     except Exception as e:
-        logging.exception("❌ Error generating chart")
+        logging.error(f"❌ Error generating chart: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-# === OPTIONAL: /compute endpoint sadece test amaçlı ===
-@app.post("/compute")
-async def compute_chart(request: Request):
-    data = await request.json()
-    logging.info(f"🧮 Compute endpoint called with data: {data}")
-    return {"input": data}
+# === Health Check ===
+@app.get("/")
+async def root():
+    return {"status": "OK", "message": "Madam Dudu Astro Core is running 🚀"}
