@@ -77,22 +77,25 @@ def draw_chart(name, dob, tob, city, country, planets):
 
     # Aspect colors
     aspect_colors = {
-        "conjunction": (180, 180, 180, 255),
-        "trine": (0, 150, 255, 255),
-        "square": (255, 60, 60, 255),
-        "sextile": (60, 255, 120, 255),
+        "conjunction": ((180, 180, 180, 255), "Conjunction"),
+        "trine": ((0, 150, 255, 255), "Trine"),
+        "square": ((255, 60, 60, 255), "Square"),
+        "sextile": ((60, 255, 120, 255), "Sextile"),
+        "opposition": ((180, 100, 255, 255), "Opposition"),
     }
 
     def aspect_color(angle_diff):
         angle = min(abs(angle_diff), 360 - abs(angle_diff))
         if abs(angle - 0) < 8:
-            return aspect_colors["conjunction"]
+            return aspect_colors["conjunction"][0]
         elif abs(angle - 60) < 8:
-            return aspect_colors["sextile"]
+            return aspect_colors["sextile"][0]
         elif abs(angle - 90) < 8:
-            return aspect_colors["square"]
+            return aspect_colors["square"][0]
         elif abs(angle - 120) < 8:
-            return aspect_colors["trine"]
+            return aspect_colors["trine"][0]
+        elif abs(angle - 180) < 8:
+            return aspect_colors["opposition"][0]
         else:
             return None
 
@@ -113,12 +116,14 @@ def draw_chart(name, dob, tob, city, country, planets):
 
     logging.info("✅ Aspect çizgileri oluşturuldu.")
 
-    # Legend
-    legend_y = height - 130
-    for idx, (name_a, color) in enumerate(aspect_colors.items()):
-        x = 200 + idx * 230
-        draw.rectangle((x, legend_y, x + 30, legend_y + 30), fill=color)
-        draw.text((x + 80, legend_y + 15), name_a.capitalize(), font=text_font, fill="white", anchor="lm")
+    # Legend (alt kısımda, açıklamalı)
+    legend_y = height - 40
+    start_x = 150
+    spacing = 250
+    for idx, (name_a, (color, label)) in enumerate(aspect_colors.items()):
+        x = start_x + idx * spacing
+        draw.rectangle((x, legend_y - 15, x + 30, legend_y + 15), fill=color)
+        draw.text((x + 50, legend_y), label, font=text_font, fill=(255, 255, 255), anchor="lm")
 
     logging.info("✅ Legend çizildi.")
 
