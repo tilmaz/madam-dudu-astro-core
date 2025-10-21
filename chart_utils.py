@@ -121,21 +121,34 @@ def draw_chart(planets, name=None, dob=None, tob=None, city=None, country=None):
     logging.info("✅ Alt bilgi çizildi.")
 
     # --- LEGEND ---
-    legend = [
+legend = [
         ("Conjunction", "#FFD400"),
         ("Sextile", "#1DB954"),
         ("Square", "#E63946"),
         ("Trine", "#1E88E5"),
         ("Opposition", "#7B1FA2"),
     ]
-    yL = bg.height - 180
-    xL = 60
-    spacing = 200
+
+    # Yazı boyutunu %50 küçült
+    try:
+        legend_font_size = max(12, int(small_font.size * 0.5))
+        legend_font = ImageFont.truetype(font_text, legend_font_size)
+    except Exception:
+        legend_font = ImageFont.load_default()
+
+    # Sayfanın en altına hizala
+    yL = bg.height - 50
+    xL = 50
+    spacing = 180
+
     for i, (label, col) in enumerate(legend):
         lx = xL + i * spacing
-        draw.rectangle([lx, yL, lx + 24, yL + 24], fill=col)
-        draw.text((lx + 34, yL + 4), label, fill=col, font=small_font)
-    logging.info("✅ Legend açıklamaları çizildi.")
+        # Küçük renk kutusu
+        draw.rectangle([lx, yL + 8, lx + 18, yL + 18], fill=col)
+        # Etiket yazısı
+        draw.text((lx + 26, yL + 2), label, fill=col, font=legend_font)
+
+    logging.info("✅ Legend açıklamaları alt hizalı ve küçültülmüş olarak çizildi.")
 
     # --- DOSYA ÇIKTI ---
     os.makedirs("charts", exist_ok=True)
