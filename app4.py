@@ -48,7 +48,7 @@ async def compute_chart(request: Request):
 @app.post("/render")
 async def render_chart(request: ChartRequest):
     logging.info(f"🎨 Rendering chart for {request.name} ({request.dob} @ {request.tob}, {request.city}, {request.country})")
-    logging.info("=== 🌌 DRAW_CHART STARTED ===")
+    logging.info("=== 🌌 DRAW_CHART STARTEDD ===")
 
     try:
         # --- CHART ÇİZİMİ ---
